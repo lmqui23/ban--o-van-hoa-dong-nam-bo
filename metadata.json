@@ -1,0 +1,6 @@
+{
+  "name": "Bản Đồ Văn Hóa Đông Nam Bộ",
+  "description": "Bản đồ tương tác và triển lãm số khám phá di sản, văn hóa, lịch sử và con người vùng Đông Nam Bộ.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
