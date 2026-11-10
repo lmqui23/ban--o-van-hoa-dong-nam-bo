@@ -82,7 +82,7 @@ export default function App() {
       scrollToSection('map-section');
     }
     const prov = params.get('province');
-    if (prov === 'hcm' || prov === 'dong-nai' || prov === 'ba-ria-vung-tau') {
+    if (prov === 'hcm' || prov === 'dong-nai' || prov === 'tay-ninh') {
       setSelectedProvince(prov);
       scrollToSection('map-section');
     }

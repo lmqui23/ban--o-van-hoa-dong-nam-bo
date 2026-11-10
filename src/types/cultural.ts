@@ -1,4 +1,22 @@
-export type ProvinceId = 'hcm' | 'dong-nai' | 'ba-ria-vung-tau';
+export type ProvinceId = 'hcm' | 'dong-nai' | 'tay-ninh';
+
+export interface ProvinceInfo {
+  id: ProvinceId;
+  name: string;
+  shortName: string;
+  vietnameseName: string;
+  tagline: string;
+  description: string;
+  color: string;
+  accentColor: string;
+  heroImage: string;
+  centerCoords: { x: number; y: number };
+  viewBox: string;
+  svgPath: string;
+  facts: { label: string; value: string }[];
+  culturalHighlights: string[];
+  mergedFrom?: string; // Bổ sung dòng này để hết lỗi ts(2339)
+}
 
 export type CulturalCategoryId =
   | 'historical'
