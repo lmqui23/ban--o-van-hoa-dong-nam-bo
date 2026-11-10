@@ -8,7 +8,6 @@ import {
   Bookmark,
   BookmarkCheck,
   Maximize2,
-  Play,
   Film,
   BookOpen,
   Compass,
@@ -16,27 +15,57 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { CulturalPoint } from '../types/cultural';
 import { CULTURAL_CATEGORIES, PROVINCES } from '../data/culturalData';
+import { uploadImageToSupabase } from '../lib/supabase';
 
 interface CulturalDetailModalProps {
   point: CulturalPoint | null;
   onClose: () => void;
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
+  onUpdatePoint?: (point: CulturalPoint) => Promise<void> | void;
 }
+
+/**
+ * Hàm hỗ trợ tự động chuẩn hóa các định dạng URL YouTube sang dạng nhúng /embed/
+ */
+const getEmbedVideoUrl = (url?: string) => {
+  if (!url) return '';
+  
+  // Nếu đã ở dạng /embed/ chuẩn
+  if (url.includes('/embed/')) return url;
+
+  // Xử lý dạng: https://www.youtube.com/watch?v=VIDEO_ID
+  const watchMatch = url.match(/(?:youtube\.com\/watch\?v=)([^&]+)/);
+  if (watchMatch && watchMatch[1]) {
+    return `https://www.youtube.com/embed/${watchMatch[1]}`;
+  }
+
+  // Xử lý dạng ngắn: https://youtu.be/VIDEO_ID
+  const shortMatch = url.match(/(?:youtu\.be\/)([^?&]+)/);
+  if (shortMatch && shortMatch[1]) {
+    return `https://www.youtube.com/embed/${shortMatch[1]}`;
+  }
+
+  return url;
+};
 
 export function CulturalDetailModal({
   point,
   onClose,
   isBookmarked,
   onToggleBookmark,
+  onUpdatePoint,
 }: CulturalDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'story' | 'gallery' | 'video' | 'visiting'>('story');
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
 
   // Close modal on Escape key
   useEffect(() => {
@@ -53,12 +82,17 @@ export function CulturalDetailModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLightboxOpen, onClose]);
 
+  // Reset selected image index when point changes
+  useEffect(() => {
+    setSelectedImageIndex(0);
+  }, [point?.id]);
+
   if (!point) return null;
 
   const categoryInfo = CULTURAL_CATEGORIES.find((c) => c.id === point.category);
   const provinceInfo = PROVINCES.find((p) => p.id === point.provinceId);
 
-  // Consolidate images (cover + gallery)
+  // Tập hợp ảnh đại diện chính (coverImage) và mảng ảnh phụ (galleryImages)
   const allImages = [point.coverImage, ...(point.galleryImages || [])].filter(
     (img, idx, arr) => arr.indexOf(img) === idx && img
   );
@@ -77,6 +111,32 @@ export function CulturalDetailModal({
 
   const prevImage = () => {
     setSelectedImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+  };
+
+  // Hỗ trợ upload ảnh phụ bổ sung trực tiếp trong Modal xem chi tiết
+  const handleUploadMoreImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !onUpdatePoint) return;
+
+    setUploadingGallery(true);
+    try {
+      const uploadPromises = Array.from(files).map((file) => uploadImageToSupabase(file));
+      const newUrls = await Promise.all(uploadPromises);
+
+      const currentGallery = point.galleryImages || [];
+      const updatedPoint: CulturalPoint = {
+        ...point,
+        galleryImages: [...currentGallery, ...newUrls],
+      };
+
+      await onUpdatePoint(updatedPoint);
+    } catch (err) {
+      console.error(err);
+      alert('Không thể tải ảnh lên Supabase Storage!');
+    } finally {
+      setUploadingGallery(false);
+      e.target.value = '';
+    }
   };
 
   return (
@@ -177,10 +237,10 @@ export function CulturalDetailModal({
             </div>
 
             {/* Navigation Tabs for Media & Content */}
-            <div className="flex items-center gap-2 border-b border-stone-800 pb-2">
+            <div className="flex items-center gap-2 border-b border-stone-800 pb-2 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('story')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 ${
                   activeTab === 'story'
                     ? 'bg-amber-400 text-stone-950 font-semibold shadow-sm'
                     : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/60'
@@ -192,7 +252,7 @@ export function CulturalDetailModal({
 
               <button
                 onClick={() => setActiveTab('gallery')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 ${
                   activeTab === 'gallery'
                     ? 'bg-amber-400 text-stone-950 font-semibold shadow-sm'
                     : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/60'
@@ -205,7 +265,7 @@ export function CulturalDetailModal({
               {point.videoUrl && (
                 <button
                   onClick={() => setActiveTab('video')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 ${
                     activeTab === 'video'
                       ? 'bg-amber-400 text-stone-950 font-semibold shadow-sm'
                       : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/60'
@@ -218,7 +278,7 @@ export function CulturalDetailModal({
 
               <button
                 onClick={() => setActiveTab('visiting')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 ${
                   activeTab === 'visiting'
                     ? 'bg-amber-400 text-stone-950 font-semibold shadow-sm'
                     : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/60'
@@ -341,26 +401,52 @@ export function CulturalDetailModal({
                   </button>
                 </div>
 
-                {/* Thumbnails Strip */}
-                <div className="flex items-center gap-3 overflow-x-auto pb-2">
-                  {allImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedImageIndex(idx)}
-                      className={`relative h-20 w-28 rounded-xl overflow-hidden border-2 shrink-0 transition-all ${
-                        selectedImageIndex === idx
-                          ? 'border-amber-400 scale-105 shadow-md shadow-amber-950/50'
-                          : 'border-transparent opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      <img
-                        src={img}
-                        alt={`Ảnh thu nhỏ ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    </button>
-                  ))}
+                {/* Thumbnails Strip & Quick Upload */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-stone-400 font-medium">
+                      Danh sách ảnh ({allImages.length}):
+                    </span>
+                    {onUpdatePoint && (
+                      <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-400 text-xs font-medium border border-stone-700 transition-colors cursor-pointer">
+                        {uploadingGallery ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        <span>{uploadingGallery ? 'Đang tải...' : 'Bổ sung ảnh phụ'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          disabled={uploadingGallery}
+                          onChange={handleUploadMoreImages}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                    {allImages.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedImageIndex(idx)}
+                        className={`relative h-20 w-28 rounded-xl overflow-hidden border-2 shrink-0 transition-all ${
+                          selectedImageIndex === idx
+                            ? 'border-amber-400 scale-105 shadow-md shadow-amber-950/50'
+                            : 'border-transparent opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <img
+                          src={img}
+                          alt={`Ảnh thu nhỏ ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -371,9 +457,9 @@ export function CulturalDetailModal({
                 <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-stone-800 bg-black shadow-xl">
                   {point.videoUrl.includes('youtube.com') || point.videoUrl.includes('youtu.be') ? (
                     <iframe
-                      src={point.videoUrl}
+                      src={getEmbedVideoUrl(point.videoUrl)}
                       title={point.videoTitle || point.name}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
                       className="w-full h-full border-0"
                     />

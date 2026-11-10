@@ -13,25 +13,13 @@ import { CulturalCMS } from './components/CulturalCMS';
 import { Footer } from './components/Footer';
 import { CulturalPoint, ProvinceId, CulturalCategoryId } from './types/cultural';
 import { INITIAL_CULTURAL_POINTS } from './data/culturalData';
+import { supabase, mapDbToPoint, mapPointToDb } from './lib/supabase';
 
-const STORAGE_KEY = 'dongnambo_cultural_points_v1';
 const BOOKMARKS_KEY = 'dongnambo_bookmarks_v1';
 
 export default function App() {
-  const [points, setPoints] = useState<CulturalPoint[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Fallback
-    }
-    return INITIAL_CULTURAL_POINTS;
-  });
+  const [points, setPoints] = useState<CulturalPoint[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
@@ -49,15 +37,36 @@ export default function App() {
   const [isCMSOpen, setIsCMSOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('hero');
 
-  // Sync to localStorage
+  // Load dữ liệu từ Supabase Database
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(points));
-    } catch {
-      // Ignore quota errors
-    }
-  }, [points]);
+    async function fetchPointsFromSupabase() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('cultural_points')
+          .select('*')
+          .order('created_at', { ascending: false });
 
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setPoints(data.map(mapDbToPoint));
+        } else {
+          // Nếu Database trống, hiển thị dữ liệu mặc định ban đầu
+          setPoints(INITIAL_CULTURAL_POINTS);
+        }
+      } catch (err) {
+        console.error('Lỗi khi lấy dữ liệu từ Supabase:', err);
+        setPoints(INITIAL_CULTURAL_POINTS);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchPointsFromSupabase();
+  }, []);
+
+  // Sync Bookmarks vào localStorage
   useEffect(() => {
     try {
       localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
@@ -103,31 +112,82 @@ export default function App() {
     );
   };
 
-  // CMS Handlers
-  const handleAddPoint = (newPoint: CulturalPoint) => {
-    setPoints((prev) => [newPoint, ...prev]);
+  // CMS Handlers với Supabase
+  const handleAddPoint = async (newPoint: CulturalPoint) => {
+    try {
+      const dbPayload = mapPointToDb(newPoint);
+      const { error } = await supabase.from('cultural_points').insert([dbPayload]);
+      if (error) throw error;
+
+      setPoints((prev) => [newPoint, ...prev]);
+    } catch (error) {
+      console.error('Lỗi khi thêm điểm văn hóa:', error);
+      alert('Không thể lưu điểm văn hóa vào CSDL Supabase!');
+    }
   };
 
-  const handleUpdatePoint = (updatedPoint: CulturalPoint) => {
-    setPoints((prev) =>
-      prev.map((p) => (p.id === updatedPoint.id ? updatedPoint : p))
+  const handleUpdatePoint = async (updatedPoint: CulturalPoint) => {
+    try {
+      const dbPayload = mapPointToDb(updatedPoint);
+      const { error } = await supabase
+        .from('cultural_points')
+        .update(dbPayload)
+        .eq('id', updatedPoint.id);
+
+      if (error) throw error;
+
+      setPoints((prev) =>
+        prev.map((p) => (p.id === updatedPoint.id ? updatedPoint : p))
+      );
+      if (activeModalPoint?.id === updatedPoint.id) {
+        setActiveModalPoint(updatedPoint);
+      }
+    } catch (error) {
+      console.error('Lỗi khi cập nhật điểm văn hóa:', error);
+      alert('Không thể cập nhật thông tin trên Supabase!');
+    }
+  };
+
+  const handleDeletePoint = async (id: string) => {
+    try {
+      const { error } = await supabase.from('cultural_points').delete().eq('id', id);
+      if (error) throw error;
+
+      setPoints((prev) => prev.filter((p) => p.id !== id));
+      if (activeModalPoint?.id === id) {
+        setActiveModalPoint(null);
+      }
+    } catch (error) {
+      console.error('Lỗi khi xóa điểm văn hóa:', error);
+      alert('Không thể xóa dữ liệu khỏi Supabase!');
+    }
+  };
+
+  const handleResetDefaults = async () => {
+    if (!confirm('Bạn có chắc muốn nạp toàn bộ dữ liệu mặc định lên Supabase?')) return;
+    try {
+      const records = INITIAL_CULTURAL_POINTS.map(mapPointToDb);
+      const { error } = await supabase.from('cultural_points').upsert(records);
+      if (error) throw error;
+
+      setPoints(INITIAL_CULTURAL_POINTS);
+      alert('Đã khôi phục dữ liệu mặc định thành công!');
+    } catch (error) {
+      console.error('Lỗi khôi phục mặc định:', error);
+      alert('Lỗi khi đồng bộ dữ liệu mặc định lên Supabase!');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-stone-950 text-amber-200 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm font-medium">Đang tải dữ liệu văn hóa Nam Bộ...</p>
+        </div>
+      </div>
     );
-    if (activeModalPoint?.id === updatedPoint.id) {
-      setActiveModalPoint(updatedPoint);
-    }
-  };
-
-  const handleDeletePoint = (id: string) => {
-    setPoints((prev) => prev.filter((p) => p.id !== id));
-    if (activeModalPoint?.id === id) {
-      setActiveModalPoint(null);
-    }
-  };
-
-  const handleResetDefaults = () => {
-    setPoints(INITIAL_CULTURAL_POINTS);
-    localStorage.removeItem(STORAGE_KEY);
-  };
+  }
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col selection:bg-amber-600/30 selection:text-amber-200">

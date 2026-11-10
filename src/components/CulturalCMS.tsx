@@ -9,23 +9,24 @@ import {
   CheckCircle2,
   AlertCircle,
   Image as ImageIcon,
-  Film,
-  MapPin,
   Save,
   Layers,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { CulturalPoint, ProvinceId, CulturalCategoryId } from '../types/cultural';
 import { PROVINCES, CULTURAL_CATEGORIES } from '../data/culturalData';
 import { validateCulturalPoint } from '../utils/culturalLogic';
+import { uploadImageToSupabase } from '../lib/supabase';
 
 interface CulturalCMSProps {
   points: CulturalPoint[];
   isOpen: boolean;
   onClose: () => void;
-  onAddPoint: (point: CulturalPoint) => void;
-  onUpdatePoint: (point: CulturalPoint) => void;
-  onDeletePoint: (id: string) => void;
-  onResetDefaults: () => void;
+  onAddPoint: (point: CulturalPoint) => Promise<void> | void;
+  onUpdatePoint: (point: CulturalPoint) => Promise<void> | void;
+  onDeletePoint: (id: string) => Promise<void> | void;
+  onResetDefaults: () => Promise<void> | void;
 }
 
 export function CulturalCMS({
@@ -43,6 +44,11 @@ export function CulturalCMS({
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // States hỗ trợ Tải ảnh lên Supabase Storage
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -70,7 +76,7 @@ export function CulturalCMS({
       address: '',
       coords: { x: 35, y: 50 },
       era: '',
-      coverImage: '/src/assets/images/saigon_cultural_heritage_1794323909832.jpg',
+      coverImage: '',
       galleryImages: [],
       videoUrl: '',
       videoTitle: '',
@@ -88,7 +94,58 @@ export function CulturalCMS({
     setEditingPoint({ ...p });
   };
 
-  const handleSave = () => {
+  // Upload 1 ảnh chính lên Supabase Storage
+  const handleUploadCoverImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingPoint) return;
+
+    setUploadingCover(true);
+    try {
+      const publicUrl = await uploadImageToSupabase(file);
+      setEditingPoint({ ...editingPoint, coverImage: publicUrl });
+      showToast('Đã tải ảnh đại diện lên thành công!');
+    } catch (err: any) {
+      console.error(err);
+      alert('Tải ảnh đại diện thất bại. Vui lòng kiểm tra cấu hình Supabase Storage!');
+    } finally {
+      setUploadingCover(false);
+      e.target.value = '';
+    }
+  };
+
+  // Upload nhiều ảnh phụ lên Supabase Storage
+  const handleUploadGalleryImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !editingPoint) return;
+
+    setUploadingGallery(true);
+    try {
+      const uploadPromises = Array.from(files).map((file) => uploadImageToSupabase(file));
+      const newUrls = await Promise.all(uploadPromises);
+
+      const currentGallery = editingPoint.galleryImages || [];
+      setEditingPoint({
+        ...editingPoint,
+        galleryImages: [...currentGallery, ...newUrls],
+      });
+      showToast(`Đã tải thêm ${newUrls.length} ảnh phụ thành công!`);
+    } catch (err: any) {
+      console.error(err);
+      alert('Tải tập hợp ảnh phụ thất bại. Vui lòng thử lại!');
+    } finally {
+      setUploadingGallery(false);
+      e.target.value = '';
+    }
+  };
+
+  // Xóa 1 ảnh phụ khỏi danh sách xem trước
+  const handleRemoveGalleryImage = (indexToRemove: number) => {
+    if (!editingPoint || !editingPoint.galleryImages) return;
+    const updatedGallery = editingPoint.galleryImages.filter((_, idx) => idx !== indexToRemove);
+    setEditingPoint({ ...editingPoint, galleryImages: updatedGallery });
+  };
+
+  const handleSave = async () => {
     if (!editingPoint) return;
 
     const validation = validateCulturalPoint(editingPoint);
@@ -97,22 +154,29 @@ export function CulturalCMS({
       return;
     }
 
-    if (isCreatingNew) {
-      onAddPoint(editingPoint as CulturalPoint);
-      showToast('Đã thêm mới địa điểm di sản thành công!');
-    } else {
-      onUpdatePoint(editingPoint as CulturalPoint);
-      showToast('Đã cập nhật thông tin địa điểm thành công!');
-    }
+    setIsSaving(true);
+    try {
+      if (isCreatingNew) {
+        await onAddPoint(editingPoint as CulturalPoint);
+        showToast('Đã thêm mới địa điểm di sản thành công!');
+      } else {
+        await onUpdatePoint(editingPoint as CulturalPoint);
+        showToast('Đã cập nhật thông tin địa điểm thành công!');
+      }
 
-    setEditingPoint(null);
-    setIsCreatingNew(false);
-    setErrors([]);
+      setEditingPoint(null);
+      setIsCreatingNew(false);
+      setErrors([]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa "${name}" khỏi cơ sở dữ liệu?`)) {
-      onDeletePoint(id);
+      await onDeletePoint(id);
       showToast(`Đã xóa "${name}"!`);
       if (editingPoint?.id === id) {
         setEditingPoint(null);
@@ -120,9 +184,9 @@ export function CulturalCMS({
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm('Khôi phục toàn bộ danh sách di sản về bộ dữ liệu chuẩn ban đầu?')) {
-      onResetDefaults();
+      await onResetDefaults();
       showToast('Đã khôi phục dữ liệu ban đầu!');
       setEditingPoint(null);
     }
@@ -136,7 +200,7 @@ export function CulturalCMS({
           <div>
             <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400">
               <Layers className="w-3.5 h-3.5" />
-              <span>HỆ THỐNG QUẢN LÝ NỘI DUNG (CMS)</span>
+              <span>HỆ THỐNG QUẢN LÝ NỘI DUNG (CMS - SUPABASE)</span>
             </div>
             <h2 className="text-xl font-serif font-bold text-stone-100">
               Quản Trị Cơ Sở Dữ Liệu Văn Hóa & Đa Phương Tiện
@@ -276,7 +340,7 @@ export function CulturalCMS({
                   />
                 </div>
 
-                {/* Coordinates (x, y on Map in percentage) */}
+                {/* Coordinates (x, y) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-stone-300">
                     Tọa độ bản đồ X (%) [0 - 100]
@@ -323,78 +387,121 @@ export function CulturalCMS({
                   />
                 </div>
 
-                {/* Cover Image URL */}
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-xs font-semibold text-stone-300 flex items-center justify-between">
-                    <span>Đường dẫn ảnh đại diện (Cover Image URL) *</span>
+                {/* 1. COVER IMAGE (Ảnh chính) */}
+                <div className="space-y-2 md:col-span-2 bg-stone-950/60 p-4 rounded-2xl border border-stone-800">
+                  <label className="text-xs font-semibold text-amber-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-amber-400" />
+                      1. Ảnh đại diện chính (Cover Image) *
+                    </span>
                     <span className="text-[11px] font-normal text-stone-400">
-                      Có thể dùng ảnh có sẵn trong hệ thống
+                      Tải tệp trực tiếp hoặc dán URL
                     </span>
                   </label>
-                  <input
-                    type="text"
-                    value={editingPoint.coverImage || ''}
-                    onChange={(e) => setEditingPoint({ ...editingPoint, coverImage: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-sm focus:border-amber-400 focus:outline-none"
-                  />
-                  {/* Quick Preset Buttons for High-Res Photos */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <span className="text-[11px] text-stone-500 font-mono">Ảnh mẫu:</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingPoint({
-                          ...editingPoint,
-                          coverImage: '/src/assets/images/saigon_cultural_heritage_1794323909832.jpg',
-                        })
-                      }
-                      className="text-[11px] px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300"
-                    >
-                      Bến Nhà Rồng / Sài Gòn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingPoint({
-                          ...editingPoint,
-                          coverImage: '/src/assets/images/dong_nai_ceramic_craft_1794323909184.jpg',
-                        })
-                      }
-                      className="text-[11px] px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300"
-                    >
-                      Làng gốm Đồng Nai
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingPoint({
-                          ...editingPoint,
-                          coverImage: '/src/assets/images/vung_tau_coastal_heritage_1794323910537.jpg',
-                        })
-                      }
-                      className="text-[11px] px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300"
-                    >
-                      Lễ hội Nghinh Ông Vũng Tàu
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingPoint({
-                          ...editingPoint,
-                          coverImage: '/src/assets/images/dong_nam_bo_landscape_1794323908424.jpg',
-                        })
-                      }
-                      className="text-[11px] px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-300"
-                    >
-                      Đại ngàn Cát Tiên
-                    </button>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    {/* Tải tệp lên Supabase */}
+                    <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium border border-amber-500/30 transition-colors cursor-pointer w-full sm:w-auto shrink-0">
+                      {uploadingCover ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      <span>{uploadingCover ? 'Đang tải lên Supabase...' : 'Tải tệp ảnh từ máy'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingCover}
+                        onChange={handleUploadCoverImage}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Dán URL */}
+                    <input
+                      type="text"
+                      value={editingPoint.coverImage || ''}
+                      onChange={(e) => setEditingPoint({ ...editingPoint, coverImage: e.target.value })}
+                      placeholder="Hoặc dán URL ảnh trực tiếp..."
+                      className="w-full px-3.5 py-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-100 text-xs focus:border-amber-400 focus:outline-none"
+                    />
                   </div>
+
+                  {/* Preview ảnh chính */}
+                  {editingPoint.coverImage && (
+                    <div className="pt-2 flex items-center gap-3">
+                      <img
+                        src={editingPoint.coverImage}
+                        alt="Ảnh đại diện"
+                        className="w-20 h-14 object-cover rounded-lg border border-amber-500/30"
+                      />
+                      <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Đã chọn ảnh đại diện thành công
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. GALLERY IMAGES (Nhiều ảnh phụ) */}
+                <div className="space-y-2 md:col-span-2 bg-stone-950/60 p-4 rounded-2xl border border-stone-800">
+                  <label className="text-xs font-semibold text-amber-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-amber-400" />
+                      2. Bộ sưu tập ảnh phụ (Gallery Images)
+                    </span>
+                    <span className="text-[11px] font-normal text-stone-400">
+                      Có thể chọn nhiều tệp cùng lúc
+                    </span>
+                  </label>
+
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium border border-stone-700 transition-colors cursor-pointer w-full sm:w-auto shrink-0">
+                      {uploadingGallery ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      <span>{uploadingGallery ? 'Đang tải mảng ảnh...' : 'Chọn nhiều ảnh phụ'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={uploadingGallery}
+                        onChange={handleUploadGalleryImages}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Danh sách các ảnh phụ đã upload */}
+                  {editingPoint.galleryImages && editingPoint.galleryImages.length > 0 && (
+                    <div className="pt-3">
+                      <p className="text-[11px] text-stone-400 mb-2">
+                        Danh sách ảnh phụ ({editingPoint.galleryImages.length} ảnh):
+                      </p>
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                        {editingPoint.galleryImages.map((url, idx) => (
+                          <div key={idx} className="relative group rounded-lg overflow-hidden border border-stone-800 aspect-video">
+                            <img src={url} alt={`Ảnh phụ ${idx + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveGalleryImage(idx)}
+                              className="absolute top-1 right-1 p-1 bg-red-600/80 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Xóa ảnh này"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Video URL & Title */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-stone-300">
-                    Đường dẫn video tư liệu (YouTube Embed hoặc file MP4)
+                    Đường dẫn video tư liệu (YouTube Embed hoặc MP4)
                   </label>
                   <input
                     type="text"
@@ -457,6 +564,22 @@ export function CulturalCMS({
                 </div>
               </div>
 
+              {/* Visiting Tips (Bổ sung ô nhập kinh nghiệm tham quan) */}
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-xs font-semibold text-stone-300">
+                  Kinh nghiệm & Lưu ý khi tham quan (Visiting Tips)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingPoint.visitingTips || ''}
+                  onChange={(e) =>
+                    setEditingPoint({ ...editingPoint, visitingTips: e.target.value })
+                  }
+                  placeholder="VD: Mở cửa từ 8h-17h, nên mặc trang phục lịch sự, thời điểm đẹp nhất để chụp ảnh..."
+                  className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-sm focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-800">
                 <button
@@ -468,10 +591,11 @@ export function CulturalCMS({
                 </button>
                 <button
                   type="button"
+                  disabled={isSaving || uploadingCover || uploadingGallery}
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold text-stone-950 bg-amber-400 hover:bg-amber-300 shadow-md shadow-amber-950/40 transition-all cursor-pointer"
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold text-stone-950 bg-amber-400 hover:bg-amber-300 shadow-md shadow-amber-950/40 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4 text-stone-950" />
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-stone-950" />}
                   <span>{isCreatingNew ? 'Thêm vào bản đồ' : 'Lưu cập nhật'}</span>
                 </button>
               </div>
