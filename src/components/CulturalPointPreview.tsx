@@ -10,10 +10,6 @@ interface CulturalPointPreviewProps {
   onExploreMore: (point: CulturalPoint) => void;
 }
 
-/* ------------------------------------------------------------------ */
-/* Helpers (cùng quy ước với LandingHero)                              */
-/* ------------------------------------------------------------------ */
-
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -28,7 +24,6 @@ export function CulturalPointPreview({ point, onClose, onExploreMore }: Cultural
   const categoryInfo = CULTURAL_CATEGORIES.find((c) => c.id === point.category);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Ánh sáng vàng bám theo con trỏ trên bảng xem trước.
   const handleMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!canHover() || prefersReducedMotion()) return;
     const el = rootRef.current;
@@ -38,7 +33,6 @@ export function CulturalPointPreview({ point, onClose, onExploreMore }: Cultural
     el.style.setProperty('--gy', `${((e.clientY - r.top) / r.height) * 100}%`);
   };
 
-  // Đom đóm nhỏ bay lên trong khung ảnh, giá trị cố định để không nhảy giữa các lần render.
   const embers = useMemo(
     () =>
       Array.from({ length: 7 }, (_, i) => ({
@@ -52,7 +46,6 @@ export function CulturalPointPreview({ point, onClose, onExploreMore }: Cultural
     [],
   );
 
-  // Tách tên thành từng chữ để trồi lên từ sau mặt nạ (nội dung không đổi).
   const nameWords = point.name.split(/\s+/).filter(Boolean);
 
   return (
@@ -60,11 +53,11 @@ export function CulturalPointPreview({ point, onClose, onExploreMore }: Cultural
       key={point.id}
       ref={rootRef}
       onMouseMove={handleMove}
-      className="cpp-root cpp-panel group absolute z-30 bottom-6 right-6 left-6 sm:left-auto sm:w-96 bg-stone-950/95 backdrop-blur-xl border border-stone-800 hover:border-amber-400/40 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-[border-color] duration-300"
+      className="cpp-root cpp-panel group relative w-full bg-stone-950/95 backdrop-blur-xl border border-stone-800 hover:border-amber-400/40 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-[border-color] duration-300"
     >
       <style>{CSS}</style>
 
-      {/* Vệt sáng vàng quét qua mép trên khi bảng xuất hiện */}
+      {/* Vệt sáng vàng quét qua mép trên */}
       <span
         aria-hidden="true"
         className="cpp-edge absolute top-0 left-0 right-0 h-px z-20 bg-gradient-to-r from-transparent via-amber-300 to-transparent"
@@ -113,13 +106,13 @@ export function CulturalPointPreview({ point, onClose, onExploreMore }: Cultural
         <button
           onClick={onClose}
           aria-label="Đóng bảng xem trước"
-          className="group/close absolute top-3 right-3 p-1.5 rounded-full bg-stone-950/70 hover:bg-stone-900 text-stone-300 hover:text-white transition-colors cursor-pointer border border-white/10 hover:border-amber-400/50"
+          className="group/close absolute top-3 right-3 p-1.5 rounded-full bg-stone-950/70 hover:bg-stone-900 text-stone-300 hover:text-white transition-colors cursor-pointer border border-white/10 hover:border-amber-400/50 z-20"
         >
           <X className="w-4 h-4 transition-transform duration-300 group-hover/close:rotate-90" />
         </button>
 
         {/* Category Badge & Era */}
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px]">
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] z-20">
           <span
             className="cpp-pop px-2.5 py-0.5 rounded-full font-medium border text-xs"
             style={{
@@ -202,13 +195,6 @@ export function CulturalPointPreview({ point, onClose, onExploreMore }: Cultural
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* CSS: trạng thái ẩn + animation nằm trong media query no-preference, */
-/* nên người dùng bật "giảm chuyển động" vẫn thấy đủ nội dung.         */
-/* Dùng fill-mode `backwards` để sau khi chạy xong phần tử trở về      */
-/* style gốc, không đè lên các hiệu ứng hover của Tailwind.            */
-/* ------------------------------------------------------------------ */
-
 const CSS = `
 .cpp-root .cpp-mask {
   display: inline-block;
@@ -227,7 +213,6 @@ const CSS = `
 @media (prefers-reduced-motion: no-preference) {
   .cpp-root .cpp-ember, .cpp-root .cpp-sheen { display: block; }
 
-  /* ---- Mở bảng ---- */
   .cpp-root.cpp-panel { animation: cpp-panel 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
   .cpp-root .cpp-clip     { animation: cpp-clip-down 0.9s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 0ms) backwards; }
   .cpp-root .cpp-kenburns { animation: cpp-kenburns 1.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
@@ -238,14 +223,12 @@ const CSS = `
   .cpp-root .cpp-pop      { animation: cpp-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0ms) backwards; }
   .cpp-root .cpp-draw-x   { transform-origin: left; animation: cpp-draw-x 1.2s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 0ms) backwards; }
 
-  /* ---- Hiệu ứng lặp nhẹ ---- */
   .cpp-root .cpp-cta    { animation: cpp-ring 2.8s ease-out 2.2s infinite; }
   .cpp-root .cpp-sheen  { transform: translateX(-120%) skewX(-20deg); animation: cpp-sheen 4.5s ease-in-out 2s infinite; }
   .cpp-root .cpp-bounce { animation: cpp-bounce 1.8s ease-in-out 2s infinite; }
   .cpp-root .cpp-ember  { opacity: 0; animation-name: cpp-ember; animation-timing-function: linear; animation-iteration-count: infinite; }
 }
 
-/* Giảm chuyển động: hiện đủ nội dung, không animation */
 @media (prefers-reduced-motion: reduce) {
   .cpp-root .cpp-edge { display: none; }
 }

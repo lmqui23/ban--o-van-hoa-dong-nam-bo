@@ -52,13 +52,13 @@ export function TopNav({ onNavigate, onOpenCMS, activeSection }: TopNavProps) {
         }`}
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-8">
-        {/* Zone 1: Brand Wordmark (Single text element in display face) */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 sm:gap-8">
+        {/* Zone 1: Brand Wordmark (Đông Nam Bộ Di Sản) */}
         <button
           onClick={() => onNavigate('hero')}
-          className="text-left group cursor-pointer focus:outline-none"
+          className="text-left group cursor-pointer focus:outline-none shrink-0"
         >
-          <span className="text-xl sm:text-2xl font-serif font-bold tracking-tight text-amber-200 group-hover:text-amber-100 transition-colors whitespace-nowrap shrink-0">
+          <span className="text-lg sm:text-2xl font-serif font-bold tracking-tight text-amber-200 group-hover:text-amber-100 transition-colors whitespace-nowrap">
             {BRAND_WORDS.map((w, i) => (
               <span key={i}>
                 <span className="tn-mask">
@@ -72,7 +72,7 @@ export function TopNav({ onNavigate, onOpenCMS, activeSection }: TopNavProps) {
           </span>
         </button>
 
-        {/* Zone 2: Concise nav links with hover underlines */}
+        {/* Zone 2: Concise nav links (Hidden on mobile, visible on desktop) */}
         <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-stone-300">
           {NAV_ITEMS.map((item, i) => {
             const isActive = activeSection === item.id;
@@ -99,19 +99,21 @@ export function TopNav({ onNavigate, onOpenCMS, activeSection }: TopNavProps) {
           })}
         </nav>
 
-        {/* Zone 3: Primary Action */}
+        {/* Zone 3: Actions (Mobile: Only CMS | Desktop: CMS + Compass CTA) */}
         <div className="flex items-center gap-3 shrink-0">
+          {/* Nút Quản lý CMS: Luôn hiển thị trên cả di động lẫn máy tính */}
           <button
             onClick={onOpenCMS}
-            className="tn-pop tn-cms flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-stone-200 bg-stone-800/80 hover:bg-stone-700/80 border border-stone-700/70 hover:border-amber-400/50 rounded-lg transition-colors whitespace-nowrap shrink-0"
+            className="tn-pop tn-cms flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-medium text-stone-200 bg-stone-800/80 hover:bg-stone-700/80 border border-stone-700/70 hover:border-amber-400/50 rounded-lg transition-colors whitespace-nowrap shrink-0"
             style={delay(850)}
             title="Quản lý và cập nhật cơ sở dữ liệu di sản"
           >
             <Database className="tn-icon w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Quản lý CMS</span>
+            <span>Quản lý</span>
           </button>
 
-          <div className="tn-pop" style={delay(950)}>
+          {/* Nút Khám phá bản đồ: Ẩn trên mobile nhỏ (hidden sm:flex), chỉ hiện từ màn hình tablet/máy tính trở lên */}
+          <div className="tn-pop hidden sm:block" style={delay(950)}>
             <button
               onClick={() => onNavigate('map-section')}
               className="tn-cta group/cta relative overflow-hidden flex items-center gap-2 px-4 py-2 text-xs font-semibold text-stone-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 rounded-lg shadow-md shadow-amber-950/40 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap shrink-0"
@@ -128,10 +130,7 @@ export function TopNav({ onNavigate, onOpenCMS, activeSection }: TopNavProps) {
 }
 
 /* ------------------------------------------------------------------ */
-/* CSS: trạng thái ẩn + animation nằm trong media query no-preference, */
-/* nên người dùng bật "giảm chuyển động" vẫn thấy đủ nội dung.         */
-/* Dùng fill-mode `backwards` để sau khi chạy xong phần tử trở về      */
-/* style gốc, không đè lên các hiệu ứng hover của Tailwind.            */
+/* CSS: giữ nguyên toàn bộ hiệu ứng animation                          */
 /* ------------------------------------------------------------------ */
 
 const CSS = `

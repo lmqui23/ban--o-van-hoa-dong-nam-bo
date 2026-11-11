@@ -3,10 +3,8 @@ import {
   MapPin,
   Sparkles,
   ArrowRight,
-  Play,
   Film,
   Calendar,
-  Layers,
   Heart,
 } from 'lucide-react';
 import { CulturalPoint, CulturalCategoryId, ProvinceId } from '../types/cultural';
@@ -28,16 +26,27 @@ interface GalleryCardProps {
   onToggleBookmark: (id: string) => void;
 }
 
-// Mỗi card tự theo dõi việc cuộn tới: card nào lần đầu lọt vào màn hình thì card đó mới chạy hiệu ứng.
-// Card mới xuất hiện khi đổi bộ lọc cũng tự chạy hiệu ứng vào.
+// Thêm CSS khắc phục lỗi hiển thị trên Mobile
+const MOBILE_FIX_CSS = `
+@media (max-width: 639px) {
+  /* Ép tất cả các phần tử hiệu ứng hiển thị 100% trên Mobile không phụ thuộc vào IntersectionObserver */
+  .fx-cs, .fx-card, .fx-pop, .fx-wipe, .fx-rise, .fx-badge, .fx-text, .fx-clip, .fx-zoom {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+    filter: none !important;
+    visibility: visible !important;
+  }
+}
+`;
+
 function GalleryCard({ point, index, isBookmarked, onSelectPoint, onToggleBookmark }: GalleryCardProps) {
-  const [revealRef, seen] = useInViewOnce<HTMLDivElement>(0.12, '0px 0px -6% 0px');
+  const [revealRef, seen] = useInViewOnce<HTMLDivElement>(0.05, '0px 0px 0px 0px');
   const { ref: tiltRef, handlers } = useTilt<HTMLDivElement>();
 
   const prov = PROVINCES.find((pr) => pr.id === point.provinceId);
   const cat = CULTURAL_CATEGORIES.find((c) => c.id === point.category);
 
-  // Các card cùng một hàng (3 cột) nối nhau lần lượt.
   const base = (index % 3) * 130;
 
   return (
@@ -52,7 +61,7 @@ function GalleryCard({ point, index, isBookmarked, onSelectPoint, onToggleBookma
         onClick={() => onSelectPoint(point)}
         className="fx-tilt group relative flex flex-col h-full rounded-2xl overflow-hidden border border-stone-800 bg-stone-950/70 hover:border-amber-400/60 transition-[border-color,box-shadow] duration-300 cursor-pointer shadow-lg hover:shadow-2xl hover:shadow-black/60"
       >
-        {/* Vệt sáng vàng quét qua mép trên khi card xuất hiện */}
+        {/* Vệt sáng vàng quét qua mép trên */}
         <span
           aria-hidden="true"
           className="fx-edge absolute top-0 left-0 right-0 h-px z-20 bg-gradient-to-r from-transparent via-amber-300 to-transparent"
@@ -73,12 +82,13 @@ function GalleryCard({ point, index, isBookmarked, onSelectPoint, onToggleBookma
               alt={point.name}
               className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
               referrerPolicy="no-referrer"
+              loading="lazy"
             />
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/30 to-transparent" />
 
-          {/* Category Chip & Video tag */}
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+          {/* Category Chip & Bookmark */}
+          <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20">
             <span
               className="fx-badge px-2.5 py-0.5 rounded-md text-[11px] font-medium backdrop-blur-md border"
               style={{
@@ -96,7 +106,7 @@ function GalleryCard({ point, index, isBookmarked, onSelectPoint, onToggleBookma
                 e.stopPropagation();
                 onToggleBookmark(point.id);
               }}
-              className="p-1.5 rounded-full bg-stone-950/70 backdrop-blur-md text-stone-300 hover:text-amber-400 transition-colors"
+              className="p-2 rounded-full bg-stone-950/70 backdrop-blur-md text-stone-300 hover:text-amber-400 transition-colors z-30 active:scale-95"
               title={isBookmarked ? 'Bỏ lưu' : 'Lưu lại'}
             >
               <Heart
@@ -108,13 +118,13 @@ function GalleryCard({ point, index, isBookmarked, onSelectPoint, onToggleBookma
           </div>
 
           {/* Province watermark */}
-          <div className="fx-badge absolute bottom-3 left-3 text-xs font-mono text-stone-300 flex items-center gap-1.5" style={delay(base + 850)}>
+          <div className="fx-badge absolute bottom-3 left-3 text-xs font-mono text-stone-300 flex items-center gap-1.5 z-20" style={delay(base + 850)}>
             <MapPin className="w-3.5 h-3.5 text-amber-400" />
             <span>{prov?.name}</span>
           </div>
 
           {point.videoUrl && (
-            <div className="fx-badge absolute bottom-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-md bg-stone-950/80 backdrop-blur-md text-[11px] text-amber-300 border border-amber-400/30 font-mono" style={delay(base + 900)}>
+            <div className="fx-badge absolute bottom-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-md bg-stone-950/80 backdrop-blur-md text-[11px] text-amber-300 border border-amber-400/30 font-mono z-20" style={delay(base + 900)}>
               <Film className="w-3 h-3 text-amber-400" />
               <span>Video</span>
             </div>
@@ -159,7 +169,7 @@ export function CulturalGallerySection({
 }: CulturalGallerySectionProps) {
   const [activeCategory, setActiveCategory] = useState<CulturalCategoryId | 'all'>('all');
   const [activeProvince, setActiveProvince] = useState<ProvinceId | 'all'>('all');
-  const [secRef, secInView] = useInViewOnce<HTMLElement>(0.1);
+  const [secRef, secInView] = useInViewOnce<HTMLElement>(0.05);
 
   const filteredPoints = points.filter((p) => {
     const matchCat = activeCategory === 'all' || p.category === activeCategory;
@@ -171,11 +181,11 @@ export function CulturalGallerySection({
     <section
       id="gallery-section"
       ref={secRef}
-      className={`fx-sec relative py-20 bg-stone-900/60 border-t border-stone-800 ${secInView ? 'fx-in' : ''}`}
+      className={`fx-sec relative py-12 sm:py-20 bg-stone-900/60 border-t border-stone-800 ${secInView ? 'fx-in' : ''}`}
     >
-      <style>{SECTION_FX_CSS}</style>
+      <style>{SECTION_FX_CSS + MOBILE_FIX_CSS}</style>
 
-      {/* Đường kẻ vàng vẽ ra ở mép trên section */}
+      {/* Đường kẻ vàng ở mép trên section */}
       <span
         aria-hidden="true"
         className="fx-line absolute top-0 left-0 h-px w-full bg-gradient-to-r from-amber-400/70 via-stone-700/80 to-transparent"
@@ -183,7 +193,7 @@ export function CulturalGallerySection({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 sm:mb-10">
           <div>
             <div className="fx-wipe flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400 mb-2" style={delay(0)}>
               <Sparkles className="fx-spark w-4 h-4 text-amber-400" />
@@ -191,7 +201,7 @@ export function CulturalGallerySection({
             </div>
             <RevealTitle
               text="Kho Tàng Văn Hóa & Không Gian Trải Nghiệm"
-              className="text-3xl sm:text-4xl font-serif font-bold text-stone-100 tracking-tight"
+              className="text-2xl sm:text-4xl font-serif font-bold text-stone-100 tracking-tight"
               delayMs={200}
             />
             <p className="fx-rise text-stone-400 text-sm mt-2 max-w-2xl leading-relaxed" style={delay(900)}>
@@ -200,7 +210,7 @@ export function CulturalGallerySection({
           </div>
 
           {/* Province Filter Tabs */}
-          <div className="fx-pop flex flex-wrap items-center gap-2 bg-stone-950/80 p-1.5 rounded-xl border border-stone-800" style={delay(1000)}>
+          <div className="fx-pop flex flex-wrap items-center gap-2 bg-stone-950/80 p-1.5 rounded-xl border border-stone-800 shrink-0" style={delay(1000)}>
             <button
               onClick={() => setActiveProvince('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -227,8 +237,8 @@ export function CulturalGallerySection({
           </div>
         </div>
 
-        {/* Category Pills Filter: từng chip nảy lên lần lượt */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-8 scrollbar-none">
+        {/* Category Pills Filter */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 sm:mb-8 scrollbar-none touch-pan-x">
           <button
             onClick={() => setActiveCategory('all')}
             className={`fx-pop px-4 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 ${
@@ -261,7 +271,7 @@ export function CulturalGallerySection({
         </div>
 
         {/* Gallery Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {filteredPoints.map((point, i) => (
             <GalleryCard
               key={point.id}
