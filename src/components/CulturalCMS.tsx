@@ -14,6 +14,8 @@ import {
   Layers,
   Upload,
   Loader2,
+  MapPin,
+  MoveHorizontal,
 } from 'lucide-react';
 import { CulturalPoint, ProvinceId, CulturalCategoryId } from '../types/cultural';
 import { PROVINCES, CULTURAL_CATEGORIES } from '../data/culturalData';
@@ -21,7 +23,7 @@ import { validateCulturalPoint } from '../utils/culturalLogic';
 import { uploadImageToSupabase } from '../lib/supabase';
 
 /* ------------------------------------------------------------------ */
-/* Helpers (cùng quy ước với LandingHero)                              */
+/* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
 const prefersReducedMotion = () =>
@@ -34,7 +36,7 @@ const canHover = () =>
 
 const delay = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties;
 
-/** Tách câu thành từng chữ trồi lên từ sau mặt nạ (nội dung không đổi). */
+/** Tách câu thành từng chữ trồi lên từ sau mặt nạ */
 function Words({ text, start, step = 60 }: { text: string; start: number; step?: number }) {
   const words = text.split(/\s+/).filter(Boolean);
   return (
@@ -85,7 +87,6 @@ export function CulturalCMS({
   const [isSaving, setIsSaving] = useState(false);
   const spotRef = useRef<HTMLDivElement>(null);
 
-  // Đom đóm bay lên phía sau bảng quản trị, giá trị cố định để không nhảy giữa các lần render.
   const embers = useMemo(
     () =>
       Array.from({ length: 12 }, (_, i) => ({
@@ -143,7 +144,6 @@ export function CulturalCMS({
     setEditingPoint({ ...p });
   };
 
-  // Upload 1 ảnh chính lên Supabase Storage
   const handleUploadCoverImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editingPoint) return;
@@ -162,7 +162,6 @@ export function CulturalCMS({
     }
   };
 
-  // Upload nhiều ảnh phụ lên Supabase Storage
   const handleUploadGalleryImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !editingPoint) return;
@@ -187,7 +186,6 @@ export function CulturalCMS({
     }
   };
 
-  // Xóa 1 ảnh phụ khỏi danh sách xem trước
   const handleRemoveGalleryImage = (indexToRemove: number) => {
     if (!editingPoint || !editingPoint.galleryImages) return;
     const updatedGallery = editingPoint.galleryImages.filter((_, idx) => idx !== indexToRemove);
@@ -241,7 +239,6 @@ export function CulturalCMS({
     }
   };
 
-  // Đèn rọi vàng đi theo chuột trên nền mờ.
   const handleOverlayMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!canHover() || prefersReducedMotion()) return;
     const el = spotRef.current;
@@ -254,7 +251,7 @@ export function CulturalCMS({
   return (
     <div
       onMouseMove={handleOverlayMove}
-      className="cms-root cms-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/85 backdrop-blur-md overflow-y-auto"
+      className="cms-root cms-overlay fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-stone-950/85 backdrop-blur-md overflow-y-auto"
     >
       <style>{CSS}</style>
 
@@ -283,7 +280,7 @@ export function CulturalCMS({
         ))}
       </div>
 
-      <div className="cms-panel relative w-full max-w-5xl max-h-[92vh] flex flex-col bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl overflow-hidden my-auto">
+      <div className="cms-panel relative w-full max-w-5xl max-h-[95vh] sm:max-h-[92vh] flex flex-col bg-stone-900 border border-stone-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto">
         {/* Vệt sáng vàng quét qua mép trên khi bảng mở */}
         <span
           aria-hidden="true"
@@ -292,21 +289,21 @@ export function CulturalCMS({
         />
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-950/90 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-stone-800 bg-stone-950/90 shrink-0">
           <div>
-            <div className="cms-wipe flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400" style={delay(250)}>
-              <Layers className="cms-twinkle w-3.5 h-3.5" />
-              <span>HỆ THỐNG QUẢN LÝ NỘI DUNG (CMS - SUPABASE)</span>
+            <div className="cms-wipe flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs font-mono uppercase tracking-wider text-amber-400" style={delay(250)}>
+              <Layers className="cms-twinkle w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <span>HỆ THỐNG QUẢN LÝ NỘI DUNG (CMS)</span>
             </div>
-            <h2 className="text-xl font-serif font-bold text-stone-100">
-              <Words text="Quản Trị Cơ Sở Dữ Liệu Văn Hóa & Đa Phương Tiện" start={350} />
+            <h2 className="text-base sm:text-xl font-serif font-bold text-stone-100">
+              <Words text="Quản Trị Cơ Sở Dữ Liệu Văn Hóa" start={350} />
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={handleReset}
-              className="cms-pop group/reset flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-stone-300 hover:text-amber-400 bg-stone-800/80 hover:bg-stone-800 border border-stone-700/80 hover:border-amber-400/50 transition-colors"
+              className="cms-pop group/reset flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs text-stone-300 hover:text-amber-400 bg-stone-800/80 hover:bg-stone-800 border border-stone-700/80 hover:border-amber-400/50 transition-colors"
               style={delay(400)}
               title="Khôi phục dữ liệu mặc định chuẩn"
             >
@@ -316,7 +313,7 @@ export function CulturalCMS({
             <button
               onClick={onClose}
               aria-label="Đóng bảng quản trị"
-              className="cms-pop group/close p-2 rounded-xl text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
+              className="cms-pop group/close p-1.5 sm:p-2 rounded-xl text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
               style={delay(480)}
             >
               <X className="w-5 h-5 transition-transform duration-300 group-hover/close:rotate-90" />
@@ -326,19 +323,19 @@ export function CulturalCMS({
 
         {/* Success Toast */}
         {successToast && (
-          <div className="cms-pop bg-emerald-500/20 border-b border-emerald-500/40 text-emerald-300 text-xs px-6 py-2.5 flex items-center gap-2">
+          <div className="cms-pop bg-emerald-500/20 border-b border-emerald-500/40 text-emerald-300 text-xs px-4 sm:px-6 py-2 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{successToast}</span>
           </div>
         )}
 
         {/* Main Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {editingPoint ? (
             /* ================= EDIT / CREATE FORM ================= */
-            <div className="cms-stagger space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-stone-800">
-                <h3 className="text-lg font-serif font-bold text-amber-300">
+            <div className="cms-stagger space-y-5 sm:space-y-6">
+              <div className="flex items-center justify-between pb-3 border-b border-stone-800">
+                <h3 className="text-base sm:text-lg font-serif font-bold text-amber-300">
                   {isCreatingNew ? 'Thêm Địa Điểm Di Sản Mới' : `Chỉnh Sửa: ${editingPoint.name}`}
                 </h3>
                 <button
@@ -351,7 +348,7 @@ export function CulturalCMS({
 
               {/* Validation Errors */}
               {errors.length > 0 && (
-                <div className="cms-alert p-4 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-xs space-y-1">
+                <div className="cms-alert p-3.5 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-xs space-y-1">
                   <div className="font-semibold flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4 text-red-400" />
                     <span>Vui lòng kiểm tra các thông tin sau:</span>
@@ -485,20 +482,16 @@ export function CulturalCMS({
                   />
                 </div>
 
-                {/* 1. COVER IMAGE (Ảnh chính) */}
+                {/* COVER IMAGE */}
                 <div className="space-y-2 md:col-span-2 bg-stone-950/60 p-4 rounded-2xl border border-stone-800">
-                  <label className="text-xs font-semibold text-amber-300 flex items-center justify-between">
+                  <label className="text-xs font-semibold text-amber-300 flex items-center justify-between flex-wrap gap-1">
                     <span className="flex items-center gap-1.5">
                       <ImageIcon className="w-4 h-4 text-amber-400" />
                       1. Ảnh đại diện chính (Cover Image) *
                     </span>
-                    <span className="text-[11px] font-normal text-stone-400">
-                      Tải tệp trực tiếp hoặc dán URL
-                    </span>
                   </label>
 
                   <div className="flex flex-col sm:flex-row items-center gap-3">
-                    {/* Tải tệp lên Supabase */}
                     <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium border border-amber-500/30 transition-colors cursor-pointer w-full sm:w-auto shrink-0">
                       {uploadingCover ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -515,7 +508,6 @@ export function CulturalCMS({
                       />
                     </label>
 
-                    {/* Dán URL */}
                     <input
                       type="text"
                       value={editingPoint.coverImage || ''}
@@ -525,7 +517,6 @@ export function CulturalCMS({
                     />
                   </div>
 
-                  {/* Preview ảnh chính */}
                   {editingPoint.coverImage && (
                     <div className="cms-pop pt-2 flex items-center gap-3">
                       <img
@@ -540,15 +531,12 @@ export function CulturalCMS({
                   )}
                 </div>
 
-                {/* 2. GALLERY IMAGES (Nhiều ảnh phụ) */}
+                {/* GALLERY IMAGES */}
                 <div className="space-y-2 md:col-span-2 bg-stone-950/60 p-4 rounded-2xl border border-stone-800">
-                  <label className="text-xs font-semibold text-amber-300 flex items-center justify-between">
+                  <label className="text-xs font-semibold text-amber-300 flex items-center justify-between flex-wrap gap-1">
                     <span className="flex items-center gap-1.5">
                       <ImageIcon className="w-4 h-4 text-amber-400" />
                       2. Bộ sưu tập ảnh phụ (Gallery Images)
-                    </span>
-                    <span className="text-[11px] font-normal text-stone-400">
-                      Có thể chọn nhiều tệp cùng lúc
                     </span>
                   </label>
 
@@ -571,15 +559,14 @@ export function CulturalCMS({
                     </label>
                   </div>
 
-                  {/* Danh sách các ảnh phụ đã upload */}
                   {editingPoint.galleryImages && editingPoint.galleryImages.length > 0 && (
                     <div className="pt-3">
                       <p className="text-[11px] text-stone-400 mb-2">
                         Danh sách ảnh phụ ({editingPoint.galleryImages.length} ảnh):
                       </p>
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                         {editingPoint.galleryImages.map((url, idx) => (
-                          <div key={idx} className="cms-pop relative group rounded-lg overflow-hidden border border-stone-800 hover:border-amber-400/50 transition-colors aspect-video" style={delay(Math.min(idx, 8) * 50)}>
+                          <div key={idx} className="cms-pop relative group rounded-lg overflow-hidden border border-stone-800 hover:border-amber-400/50 transition-colors aspect-video">
                             <img src={url} alt={`Ảnh phụ ${idx + 1}`} className="w-full h-full object-cover" />
                             <button
                               type="button"
@@ -599,7 +586,7 @@ export function CulturalCMS({
                 {/* Video URL & Title */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-stone-300">
-                    Đường dẫn video tư liệu (YouTube Embed hoặc MP4)
+                    Đường dẫn video tư liệu (YouTube Embed/MP4)
                   </label>
                   <input
                     type="text"
@@ -660,22 +647,22 @@ export function CulturalCMS({
                     className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-sm focus:border-amber-400 focus:outline-none"
                   />
                 </div>
-              </div>
 
-              {/* Visiting Tips (Bổ sung ô nhập kinh nghiệm tham quan) */}
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="text-xs font-semibold text-stone-300">
-                  Kinh nghiệm & Lưu ý khi tham quan (Visiting Tips)
-                </label>
-                <textarea
-                  rows={2}
-                  value={editingPoint.visitingTips || ''}
-                  onChange={(e) =>
-                    setEditingPoint({ ...editingPoint, visitingTips: e.target.value })
-                  }
-                  placeholder="VD: Mở cửa từ 8h-17h, nên mặc trang phục lịch sự, thời điểm đẹp nhất để chụp ảnh..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-sm focus:border-amber-400 focus:outline-none"
-                />
+                {/* Visiting Tips */}
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-semibold text-stone-300">
+                    Kinh nghiệm & Lưu ý khi tham quan
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editingPoint.visitingTips || ''}
+                    onChange={(e) =>
+                      setEditingPoint({ ...editingPoint, visitingTips: e.target.value })
+                    }
+                    placeholder="VD: Mở cửa từ 8h-17h, nên mặc trang phục lịch sự..."
+                    className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-sm focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
               </div>
 
               {/* Action Buttons */}
@@ -683,7 +670,7 @@ export function CulturalCMS({
                 <button
                   type="button"
                   onClick={() => setEditingPoint(null)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-stone-300 hover:bg-stone-800 hover:-translate-y-0.5 active:translate-y-0 transition-all"
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-stone-300 hover:bg-stone-800 transition-all"
                 >
                   Hủy bỏ
                 </button>
@@ -700,10 +687,10 @@ export function CulturalCMS({
               </div>
             </div>
           ) : (
-            /* ================= DATA LIST & TABLE VIEW ================= */
+            /* ================= DATA LIST VIEW ================= */
             <div className="cms-stagger space-y-4">
               {/* Toolbar */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="relative w-full sm:w-72">
                   <Search className="w-4 h-4 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -719,7 +706,7 @@ export function CulturalCMS({
                   <select
                     value={filterProvince}
                     onChange={(e) => setFilterProvince(e.target.value as ProvinceId | 'all')}
-                    className="px-3 py-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-300 text-xs focus:outline-none"
+                    className="px-3 py-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-300 text-xs focus:outline-none flex-1 sm:flex-initial"
                   >
                     <option value="all">Tất cả tỉnh thành</option>
                     {PROVINCES.map((p) => (
@@ -731,25 +718,34 @@ export function CulturalCMS({
 
                   <button
                     onClick={handleStartCreate}
-                    className="cms-cta group/add relative overflow-hidden flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-stone-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap cursor-pointer shadow-sm shadow-amber-950/40"
+                    className="cms-cta group/add relative overflow-hidden flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold text-stone-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap cursor-pointer shadow-sm shadow-amber-950/40"
                   >
                     <span aria-hidden="true" className="cms-sheen absolute inset-y-0 left-0 w-1/4 bg-white/40 blur-md" />
                     <Plus className="relative w-4 h-4 text-stone-950 transition-transform duration-300 group-hover/add:rotate-90" />
-                    <span className="relative">Thêm địa điểm mới</span>
+                    <span className="relative">Thêm mới</span>
                   </button>
                 </div>
               </div>
 
-              {/* Table */}
-              <div className="rounded-2xl border border-stone-800 overflow-hidden bg-stone-950/50">
-                <table className="w-full text-left text-xs text-stone-300">
+              {/* Gợi ý vuốt ngang cho Mobile */}
+              <div className="flex sm:hidden items-center justify-between text-[11px] font-mono text-amber-400/90 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg">
+                <span className="flex items-center gap-1.5">
+                  <MoveHorizontal className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Kéo sang ngang để xem thêm chi tiết & thao tác</span>
+                </span>
+                <span className="text-[10px] text-stone-400">({filteredPoints.length} mục)</span>
+              </div>
+
+              {/* List / Table Wrapper */}
+              <div className="rounded-2xl border border-stone-800 overflow-x-auto bg-stone-950/50 scrollbar-none touch-pan-x">
+                <table className="w-full text-left text-xs text-stone-300 min-w-[620px] sm:min-w-full">
                   <thead className="bg-stone-950 text-stone-400 font-mono uppercase text-[10px] tracking-wider border-b border-stone-800">
                     <tr>
-                      <th className="py-3 px-4">Ảnh & Tên địa điểm</th>
-                      <th className="py-3 px-4">Tỉnh / Thành</th>
-                      <th className="py-3 px-4">Loại hình</th>
-                      <th className="py-3 px-4">Tọa độ (%)</th>
-                      <th className="py-3 px-4 text-right">Thao tác</th>
+                      <th className="py-3 px-3 sm:px-4">Ảnh & Tên địa điểm</th>
+                      <th className="py-3 px-3 sm:px-4">Tỉnh / Thành</th>
+                      <th className="py-3 px-3 sm:px-4">Loại hình</th>
+                      <th className="py-3 px-3 sm:px-4">Tọa độ (%)</th>
+                      <th className="py-3 px-3 sm:px-4 text-right">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-800/60">
@@ -766,24 +762,24 @@ export function CulturalCMS({
 
                         return (
                           <tr key={p.id} className="cms-row group hover:bg-stone-900/50 transition-colors" style={delay(Math.min(rowIndex, 10) * 50)}>
-                            <td className="py-3 px-4 flex items-center gap-3">
+                            <td className="py-3 px-3 sm:px-4 flex items-center gap-2.5 sm:gap-3">
                               <img
                                 src={p.coverImage}
                                 alt={p.name}
-                                className="w-10 h-10 rounded-lg object-cover border border-stone-800 group-hover:border-amber-400/50 group-hover:scale-110 transition-all duration-300 shrink-0"
+                                className="w-10 h-10 rounded-lg object-cover border border-stone-800 group-hover:border-amber-400/50 group-hover:scale-105 transition-all duration-300 shrink-0"
                                 referrerPolicy="no-referrer"
                               />
                               <div>
-                                <div className="font-semibold text-stone-100">{p.name}</div>
-                                <div className="text-[11px] text-stone-500 line-clamp-1 max-w-xs">
+                                <div className="font-semibold text-stone-100 line-clamp-1 max-w-[160px] sm:max-w-none">{p.name}</div>
+                                <div className="text-[11px] text-stone-500 line-clamp-1 max-w-[180px] sm:max-w-xs">
                                   {p.address}
                                 </div>
                               </div>
                             </td>
-                            <td className="py-3 px-4 font-medium text-stone-200">
+                            <td className="py-3 px-3 sm:px-4 font-medium text-stone-200 whitespace-nowrap">
                               {prov?.shortName || p.provinceId}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
                               <span
                                 className="px-2 py-0.5 rounded text-[11px] font-medium"
                                 style={{
@@ -794,23 +790,23 @@ export function CulturalCMS({
                                 {cat?.shortLabel || p.category}
                               </span>
                             </td>
-                            <td className="py-3 px-4 font-mono text-[11px] text-stone-400">
+                            <td className="py-3 px-3 sm:px-4 font-mono text-[11px] text-stone-400 whitespace-nowrap">
                               X: {p.coords.x} · Y: {p.coords.y}
                             </td>
-                            <td className="py-3 px-4 text-right space-x-2">
+                            <td className="py-3 px-3 sm:px-4 text-right space-x-1 sm:space-x-2 whitespace-nowrap">
                               <button
                                 onClick={() => handleStartEdit(p)}
                                 aria-label={`Sửa ${p.name}`}
-                                className="p-1.5 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-800 hover:scale-110 active:scale-95 transition-all inline-flex"
+                                className="p-2 sm:p-1.5 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-800 active:scale-95 transition-all inline-flex"
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
+                                <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDelete(p.id, p.name)}
                                 aria-label={`Xóa ${p.name}`}
-                                className="p-1.5 rounded-lg text-stone-400 hover:text-red-400 hover:bg-stone-800 hover:scale-110 active:scale-95 transition-all inline-flex"
+                                className="p-2 sm:p-1.5 rounded-lg text-stone-400 hover:text-red-400 hover:bg-stone-800 active:scale-95 transition-all inline-flex"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                               </button>
                             </td>
                           </tr>
@@ -827,14 +823,11 @@ export function CulturalCMS({
     </div>
   );
 }
+
 /* ------------------------------------------------------------------ */
-/* CSS: trạng thái ẩn + animation nằm trong media query no-preference, */
-/* nên người dùng bật "giảm chuyển động" vẫn thấy đủ nội dung.         */
-/* Dùng fill-mode `backwards` để sau khi chạy xong phần tử trở về      */
-/* style gốc, không đè lên các hiệu ứng hover của Tailwind.            */
+/* CSS Animations & Fallback cho Mobile                              */
 /* ------------------------------------------------------------------ */
 
-// Mỗi phần tử con trực tiếp của .cms-stagger hiện lần lượt, cách nhau 60ms.
 const STAGGER = Array.from(
   { length: 18 },
   (_, i) => `:where(.cms-root .cms-stagger) > :nth-child(${i + 1}) { --d: ${100 + i * 60}ms; }`,
@@ -857,7 +850,6 @@ const CSS = `
 .cms-root .cms-edge { opacity: 0; }
 .cms-root .cms-ember, .cms-root .cms-sheen { display: none; }
 
-/* Ô nhập liệu: viền vàng + quầng sáng nhẹ khi focus */
 .cms-root input:focus, .cms-root textarea:focus, .cms-root select:focus {
   box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14);
 }
@@ -869,7 +861,6 @@ ${STAGGER}
   .cms-root .cms-ember, .cms-root .cms-sheen { display: block; }
   .cms-root input, .cms-root textarea, .cms-root select { transition: border-color 0.2s, box-shadow 0.25s; }
 
-  /* ---- Mở bảng quản trị ---- */
   .cms-root.cms-overlay { animation: cms-fade 0.35s ease backwards; }
   .cms-root .cms-panel  { animation: cms-panel 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
   .cms-root .cms-edge   { animation: cms-edge 1.4s ease-out var(--d, 0ms) backwards; }
@@ -880,14 +871,19 @@ ${STAGGER}
   .cms-root .cms-alert  { animation: cms-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, cms-shake 0.5s ease 0.5s; }
   :where(.cms-root .cms-stagger) > * { animation: cms-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) backwards; }
 
-  /* ---- Hiệu ứng lặp nhẹ ---- */
   .cms-root .cms-cta     { animation: cms-ring 2.8s ease-out 2s infinite; }
   .cms-root .cms-sheen   { transform: translateX(-120%) skewX(-20deg); animation: cms-sheen 4.5s ease-in-out 1.5s infinite; }
   .cms-root .cms-twinkle { animation: cms-twinkle 2.6s ease-in-out infinite; }
   .cms-root .cms-ember   { opacity: 0; animation-name: cms-ember; animation-timing-function: linear; animation-iteration-count: infinite; }
 }
 
-/* Giảm chuyển động: hiện đủ nội dung, không animation */
+@media (max-width: 639px) {
+  .cms-root .cms-row, .cms-root .cms-pop, .cms-root .cms-wipe, .cms-root .cms-word {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cms-root .cms-edge { display: none; }
 }
