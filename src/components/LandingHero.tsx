@@ -3,7 +3,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import { ArrowDown, Compass, MapPin, Sparkles } from 'lucide-react';
 import { PROVINCES } from '../data/culturalData';
 import { ProvinceId } from '../types/cultural';
-
+import heroBgImage from '../assets/images/dong_nam_bo_landscape_1794323908424.jpg';
 interface LandingHeroProps {
   onExploreMap: (provinceId?: ProvinceId) => void;
   totalPointsCount: number;
@@ -293,7 +293,7 @@ export function LandingHero({ onExploreMap, totalPointsCount }: LandingHeroProps
       <div className="absolute inset-0 -z-10">
         <div ref={bgRef} className="lh-bg absolute -inset-x-[4%] -top-[12%] -bottom-[12%]">
           <img
-            src="/src/assets/images/dong_nam_bo_landscape_1794323908424.jpg"
+            src={heroBgImage}
             alt="Cảnh sắc thiên nhiên và sông nước Đông Nam Bộ"
             className="lh-kenburns w-full h-full object-cover object-center"
             referrerPolicy="no-referrer"
