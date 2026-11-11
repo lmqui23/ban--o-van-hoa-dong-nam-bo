@@ -11,6 +11,7 @@ import { CulturalGallerySection } from './components/CulturalGallerySection';
 import { CulturalDetailModal } from './components/CulturalDetailModal';
 import { CulturalCMS } from './components/CulturalCMS';
 import { Footer } from './components/Footer';
+import { IntroLoader } from './components/IntroLoader';
 import { CulturalPoint, ProvinceId, CulturalCategoryId } from './types/cultural';
 import { INITIAL_CULTURAL_POINTS } from './data/culturalData';
 import { supabase, mapDbToPoint, mapPointToDb } from './lib/supabase';
@@ -20,6 +21,7 @@ const BOOKMARKS_KEY = 'dongnambo_bookmarks_v1';
 export default function App() {
   const [points, setPoints] = useState<CulturalPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isIntroFinished, setIsIntroFinished] = useState<boolean>(false);
 
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
@@ -91,11 +93,19 @@ export default function App() {
     }
   }, []);
 
-  const scrollToSection = (id: string) => {
+  // Hàm cuộn trang linh hoạt với yOffset tùy chỉnh (đặc biệt cho map-section để kéo xuống sâu hơn)
+  const scrollToSection = (id: string, offset = 0) => {
     setActiveSection(id);
     const el = document.getElementById(id);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+      if (id === 'map-section') {
+        // Cộng thêm offset (80px - 100px) để hiển thị hết sạch khung bản đồ bên dưới
+        const yOffset = offset || 90;
+        const y = el.getBoundingClientRect().top + window.scrollY + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      } else {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   };
 
@@ -103,7 +113,7 @@ export default function App() {
     if (provId) {
       setSelectedProvince(provId);
     }
-    scrollToSection('map-section');
+    scrollToSection('map-section', 100);
   };
 
   const handleToggleBookmark = (id: string) => {
@@ -178,19 +188,21 @@ export default function App() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-stone-950 text-amber-200 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm font-medium">Đang tải dữ liệu văn hóa Nam Bộ...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col selection:bg-amber-600/30 selection:text-amber-200">
+      {/* 
+        Màn hình Intro Loader nghệ thuật:
+        - ready={!loading}: Loader chờ dữ liệu Supabase nạp xong.
+        - minDuration={3600}: Ép chờ 3.6s để chạy xong toàn bộ kịch bản vẽ sông & hiệu ứng chữ vàng.
+      */}
+      {!isIntroFinished && (
+        <IntroLoader
+          ready={!loading}
+          minDuration={3600}
+          onFinish={() => setIsIntroFinished(true)}
+        />
+      )}
+
       {/* Top Bar Navigation */}
       <TopNav
         onNavigate={scrollToSection}
@@ -230,7 +242,7 @@ export default function App() {
         onNavigate={scrollToSection}
         onSelectProvince={(p) => {
           setSelectedProvince(p);
-          scrollToSection('map-section');
+          scrollToSection('map-section', 100);
         }}
       />
 

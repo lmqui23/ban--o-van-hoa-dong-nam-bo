@@ -10,6 +10,7 @@ import {
 import { CulturalPoint, ProvinceId, CulturalCategoryId } from '../types/cultural';
 import { PROVINCES, CULTURAL_CATEGORIES } from '../data/culturalData';
 import { CulturalPointPreview } from './CulturalPointPreview';
+import { RevealTitle, SECTION_FX_CSS, delay, useInViewOnce } from './sectionFx';
 
 
 type GeoPosition = [number, number, ...number[]];
@@ -144,6 +145,9 @@ const MAX_ZOOM = 6;
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+// Chuyển động ngắn (zoom nút/cuộn) dùng easeOut: phản hồi ngay rồi lướt êm vào đích,
+// không bị "ì" ở đầu như easeInOut khi các sự kiện cuộn liên tiếp khởi động lại animation.
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 const fitBoundsToViewBox = (bounds: Bounds, aspect = 16 / 9, padding = 1.22): Camera => {
   const centerX = (bounds.minX + bounds.maxX) / 2;
@@ -163,6 +167,41 @@ const clampCamera = (c: Camera, world: Bounds | null): Camera => {
   return { ...c, x: cx - c.w / 2, y: cy - c.h / 2 };
 };
 
+// Hiệu ứng riêng của khung bản đồ, chỉ chạy một lần khi người dùng lần đầu cuộn tới
+// (cùng thời điểm camera bắt đầu bay vào Đông Nam Bộ).
+// LƯU Ý: tuyệt đối không che/ẩn khung bản đồ bằng clip-path hay lớp phủ đục. Bản đồ phải
+// luôn hiện thật; các hiệu ứng dưới đây chỉ là lớp trang trí đè lên trên.
+const MAP_FX_CSS = `
+/* Vệt sáng mềm quét ngang mặt kính: nhiều điểm dừng màu + blur nên không có mép cứng */
+.cm-sheen {
+  position: absolute; top: -25%; bottom: -25%; left: -45%; width: 45%;
+  opacity: 0; pointer-events: none; filter: blur(10px); will-change: transform, opacity;
+  background: linear-gradient(100deg,
+    rgba(251,191,36,0) 0%, rgba(251,191,36,.04) 22%, rgba(253,224,130,.10) 40%,
+    rgba(255,243,199,.18) 50%, rgba(253,224,130,.10) 60%, rgba(251,191,36,.04) 78%, rgba(251,191,36,0) 100%);
+}
+
+/* Sóng lan vẽ bằng SVG tại tâm từng tỉnh (nét luôn sắc, không bị răng cưa như gradient) */
+.cm-wave { transform-box: fill-box; transform-origin: center; opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .cm-frame.cm-in { animation: cm-border 2.8s ease-out backwards; }
+  .cm-frame.cm-in .cm-sheen { animation: cm-sheen 2.6s cubic-bezier(.4,0,.2,1) .3s both; }
+  .cm-frame.cm-in .cm-wave { animation: cm-wave 3s cubic-bezier(.16,.6,.3,1) var(--d, 0ms) both; }
+}
+@keyframes cm-border { from { border-color: rgba(251,191,36,.85); } }
+@keyframes cm-sheen {
+  0% { opacity: 0; transform: translateX(0) skewX(-16deg); }
+  18%, 82% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(430%) skewX(-16deg); }
+}
+@keyframes cm-wave {
+  0% { opacity: 0; transform: scale(.1); }
+  16% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1); }
+}
+`;
+
 const MAP_CSS = `
 @keyframes cm-ring { 0% { transform: scale(1); opacity: .7 } 100% { transform: scale(2.8); opacity: 0 } }
 @keyframes cm-pop { 0% { transform: scale(0); opacity: 0 } 60% { transform: scale(1.25); opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
@@ -174,8 +213,39 @@ const MAP_CSS = `
 .cm-fade { animation: cm-fade 900ms ease-out both; }
 .cm-label { animation: cm-label 220ms ease-out both; }
 .cm-slide { animation: cm-slide 300ms ease-out both; }
+
+/* Vệt sáng chạy dọc viền tỉnh đang chọn (nét đứt trôi liên tục, độ dài tính theo pixel màn hình) */
+@keyframes cm-march { to { stroke-dashoffset: -32; } }
+.cm-march { stroke-dasharray: 7 9; animation: cm-march 1.8s linear infinite; }
+
+/* Quầng sáng biển trôi chậm phía sau bản đồ */
+@keyframes cm-drift {
+  from { transform: translate3d(-5%, -2%, 0) scale(1); }
+  to { transform: translate3d(5%, 3%, 0) scale(1.08); }
+}
+.cm-drift-a, .cm-drift-b { position: absolute; inset: -20%; pointer-events: none; will-change: transform; }
+.cm-drift-a {
+  background:
+    radial-gradient(38% 32% at 28% 38%, rgba(56,189,248,.075), transparent 70%),
+    radial-gradient(30% 26% at 78% 70%, rgba(45,212,191,.055), transparent 70%);
+  animation: cm-drift 28s ease-in-out infinite alternate;
+}
+.cm-drift-b {
+  background: radial-gradient(34% 28% at 65% 25%, rgba(125,211,252,.055), transparent 70%);
+  animation: cm-drift 36s ease-in-out -12s infinite alternate-reverse;
+}
+
+/* Đèn rọi vàng theo con trỏ, mờ dần khi chuột rời khung */
+.cm-spot {
+  background: radial-gradient(360px circle at var(--sx, 50%) var(--sy, 50%), rgba(251,191,36,.10), transparent 65%);
+  mix-blend-mode: screen;
+  opacity: var(--so, 0);
+  transition: opacity 600ms ease;
+}
 @media (prefers-reduced-motion: reduce) {
-  .cm-ring, .cm-pop, .cm-fade, .cm-label, .cm-slide { animation: none !important; }
+  .cm-ring, .cm-pop, .cm-fade, .cm-label, .cm-slide, .cm-drift-a, .cm-drift-b { animation: none !important; }
+  .cm-march { animation: none !important; stroke-dasharray: none; }
+  .cm-spot { display: none; }
   .cm-motion, .cm-motion * { transition: none !important; }
 }
 `;
@@ -261,6 +331,13 @@ const FocusLayer = memo(function FocusLayer({ shapes, selected, hovered, onHover
                   strokeOpacity: isActive ? 0.6 : 0,
                   transition: 'stroke-opacity 450ms ease',
                 }} />
+                {/* vệt sáng chạy dọc đường viền khi tỉnh được chọn */}
+                <path d={s.d} fill="none" stroke={st.label} strokeLinejoin="round" strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke" className="cm-march" style={{
+                    strokeWidth: 1.4,
+                    strokeOpacity: isActive ? 0.85 : 0,
+                    transition: 'stroke-opacity 450ms ease',
+                  }} />
               </g>
             </g>
           );
@@ -296,8 +373,12 @@ export function CulturalMap({
   const [isDragging, setIsDragging] = useState(false);
   const [inView, setInView] = useState(false);
   const [size, setSize] = useState({ w: 1100, h: 620 });
+  const [secRef, secInView] = useInViewOnce<HTMLDivElement>(0.12);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  // Thẻ bọc ngoài khung bản đồ: IntersectionObserver phải theo dõi phần tử KHÔNG bị clip-path,
+  // vì phần tử đang bị clip-path circle(0%) sẽ không bao giờ được tính là "đã vào màn hình".
+  const frameWrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Camera: state để React vẽ lại, ref để các handler/animation đọc giá trị mới nhất.
@@ -309,7 +390,9 @@ export function CulturalMap({
   const zoomRef = useRef(1);
   const animRef = useRef(0);
   const introStartedRef = useRef(false);
+  const markersReadyRef = useRef(false); // false = marker đang chờ camera bay xong mới nảy lên
   const suppressClickRef = useRef(false);
+  const inertiaRef = useRef(false); // true = camera đang trượt theo quán tính sau khi thả tay
 
   const selectedProvinceRef = useRef(selectedProvince);
   selectedProvinceRef.current = selectedProvince;
@@ -377,7 +460,7 @@ export function CulturalMap({
 
   // Chỉ bắt đầu hiệu ứng bay vào Đông Nam Bộ khi người dùng đã cuộn tới bản đồ.
   useEffect(() => {
-    const el = mapContainerRef.current;
+    const el = frameWrapRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') {
       setInView(true);
       return;
@@ -391,6 +474,14 @@ export function CulturalMap({
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  // Marker chờ camera bay vào Đông Nam Bộ rồi mới nảy lên. Sau khi mở màn xong
+  // (về sau đổi bộ lọc), marker mới xuất hiện ngay không cần chờ.
+  useEffect(() => {
+    if (!inView) return;
+    const t = window.setTimeout(() => { markersReadyRef.current = true; }, 4500);
+    return () => window.clearTimeout(t);
+  }, [inView]);
 
   /* ------------------------- Dữ liệu hình học (tính 1 lần) ------------------------- */
   // Trước đây geometryToPath bị gọi lại ở mọi lần render (kể cả mỗi lần hover).
@@ -461,6 +552,7 @@ export function CulturalMap({
   // (đổi tỉnh, bấm zoom, kéo bản đồ) sẽ tiếp tục từ vị trí hiện tại nên không bị giật.
   const flyTo = useCallback((target: Camera, duration = 900) => {
     cancelAnimationFrame(animRef.current);
+    inertiaRef.current = false;
     targetRef.current = target;
     if (reducedMotion || duration <= 0) {
       commitCamera(target);
@@ -472,9 +564,10 @@ export function CulturalMap({
     const lw0 = Math.log(from.w), lw1 = Math.log(target.w);
     const lh0 = Math.log(from.h), lh1 = Math.log(target.h);
     const t0 = performance.now();
+    const ease = duration <= 600 ? easeOutCubic : easeInOutCubic;
     const tick = (now: number) => {
       const p = Math.min(1, (now - t0) / duration);
-      const e = easeInOutCubic(p);
+      const e = ease(p);
       const w = Math.exp(lw0 + (lw1 - lw0) * e);
       const h = Math.exp(lh0 + (lh1 - lh0) * e);
       const cx = fcx + (tcx - fcx) * e;
@@ -544,6 +637,45 @@ export function CulturalMap({
     if (!el) return;
     let drag: { x: number; y: number; cam: Camera; moved: boolean } | null = null;
 
+    // Gộp các sự kiện pointermove: tối đa một lần vẽ lại mỗi khung hình (mượt hơn trên chuột/trackpad tần số cao).
+    let pendingCam: Camera | null = null;
+    let dragRaf = 0;
+    const flushDrag = () => {
+      dragRaf = 0;
+      if (pendingCam) { commitCamera(pendingCam); pendingCam = null; }
+    };
+
+    // Vận tốc kéo (px/ms), làm mượt bằng trung bình trượt để quán tính không bị giật.
+    let vx = 0, vy = 0, lastX = 0, lastY = 0, lastT = 0;
+
+    // Sau khi thả tay, bản đồ trượt tiếp rồi chậm dần như vật thể có ma sát.
+    const startInertia = (rect: DOMRect) => {
+      let prev = performance.now();
+      inertiaRef.current = true;
+      const tick = (now: number) => {
+        if (!inertiaRef.current) return;
+        const dt = Math.min(32, now - prev);
+        prev = now;
+        const decay = Math.exp(-dt / 260);
+        vx *= decay; vy *= decay;
+        const cam = cameraRef.current;
+        const c = clampCamera({
+          x: cam.x - (vx * dt * cam.w) / rect.width,
+          y: cam.y - (vy * dt * cam.h) / rect.height,
+          w: cam.w,
+          h: cam.h,
+        }, worldRef.current);
+        targetRef.current = c;
+        commitCamera(c);
+        if (Math.hypot(vx, vy) > 0.02) {
+          animRef.current = requestAnimationFrame(tick);
+        } else {
+          inertiaRef.current = false;
+        }
+      };
+      animRef.current = requestAnimationFrame(tick);
+    };
+
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
@@ -566,8 +698,17 @@ export function CulturalMap({
         drag.cam = { ...cameraRef.current };
         drag.x = e.clientX; drag.y = e.clientY;
         dx = 0; dy = 0;
+        lastX = e.clientX; lastY = e.clientY; lastT = performance.now();
+        vx = 0; vy = 0;
         setIsDragging(true);
       }
+      const nowT = performance.now();
+      const dtv = nowT - lastT;
+      if (dtv > 0) {
+        vx = vx * 0.5 + ((e.clientX - lastX) / dtv) * 0.5;
+        vy = vy * 0.5 + ((e.clientY - lastY) / dtv) * 0.5;
+      }
+      lastX = e.clientX; lastY = e.clientY; lastT = nowT;
       const rect = el.getBoundingClientRect();
       const c = clampCamera({
         x: drag.cam.x - (dx * drag.cam.w) / rect.width,
@@ -576,17 +717,24 @@ export function CulturalMap({
         h: drag.cam.h,
       }, worldRef.current);
       targetRef.current = c;
-      commitCamera(c);
+      pendingCam = c;
+      if (!dragRaf) dragRaf = requestAnimationFrame(flushDrag);
     };
 
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
+      if (dragRaf) { cancelAnimationFrame(dragRaf); flushDrag(); }
       if (drag?.moved) {
         // Chặn cú click ngay sau khi thả chuột để không vô tình chọn tỉnh/marker.
         suppressClickRef.current = true;
         window.setTimeout(() => { suppressClickRef.current = false; }, 60);
+        // Thả tay khi vẫn đang kéo nhanh thì trượt tiếp; dừng tay trước khi thả thì không trượt.
+        const idle = performance.now() - lastT;
+        if (!reducedMotion && idle < 90 && Math.hypot(vx, vy) > 0.08) {
+          startInertia(el.getBoundingClientRect());
+        }
       }
       drag = null;
       setIsDragging(false);
@@ -594,6 +742,12 @@ export function CulturalMap({
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || !e.isPrimary) return;
+      // Chạm vào bản đồ đang trượt thì giữ nó lại ngay.
+      if (inertiaRef.current) {
+        cancelAnimationFrame(animRef.current);
+        inertiaRef.current = false;
+      }
+      vx = 0; vy = 0;
       drag = { x: e.clientX, y: e.clientY, cam: { ...targetRef.current }, moved: false };
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
@@ -605,11 +759,12 @@ export function CulturalMap({
     return () => {
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('pointerdown', onDown);
+      cancelAnimationFrame(dragRaf);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [zoomAt, commitCamera]);
+  }, [zoomAt, commitCamera, reducedMotion]);
 
   /* --------------------------------- Dữ liệu điểm --------------------------------- */
   const displayedPoints = useMemo(() => {
@@ -677,32 +832,63 @@ export function CulturalMap({
     return list;
   }, [activePoint, hoveredPoint]);
 
+  // Đèn rọi vàng mềm đi theo con trỏ trong khung bản đồ. Chỉ đặt biến CSS, không làm React vẽ lại.
+  const handleFrameMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse' || reducedMotion) return;
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--sx', `${e.clientX - r.left}px`);
+    el.style.setProperty('--sy', `${e.clientY - r.top}px`);
+    el.style.setProperty('--so', '1');
+  };
+  const handleFrameLeave = () => {
+    mapContainerRef.current?.style.setProperty('--so', '0');
+  };
+
+  // Lưới chấm trôi theo camera (thị sai nhẹ) để khi kéo/zoom bản đồ có chiều sâu thay vì đứng yên.
+  const GRID_STEP = 24;
+  const gridPx = size.w / Math.max(1, camera.w);
+  const gridPos = (v: number) => `${(((-v * gridPx * 0.35) % GRID_STEP) + GRID_STEP) % GRID_STEP}px`;
+
   const zoomBtn =
-    'p-2.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-stone-200 border border-stone-700/80 shadow-lg ' +
-    'backdrop-blur-md transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none ' +
+    'group p-2.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-stone-200 hover:text-amber-300 border border-stone-700/80 hover:border-amber-400/50 shadow-lg ' +
+    'backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:pointer-events-none ' +
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70';
 
   return (
-    <div id="map-section" className="relative w-full bg-stone-950 py-10 border-t border-stone-800">
-      <style>{MAP_CSS}</style>
+    <div
+      id="map-section"
+      ref={secRef}
+      className={`fx-sec relative w-full bg-stone-950 py-10 border-t border-stone-800 ${secInView ? 'fx-in' : ''}`}
+    >
+      <style>{MAP_CSS + MAP_FX_CSS + SECTION_FX_CSS}</style>
+
+      {/* Đường kẻ vàng vẽ ra ở mép trên section */}
+      <span
+        aria-hidden="true"
+        className="fx-line absolute top-0 left-0 h-px w-full bg-gradient-to-r from-amber-400/70 via-stone-700/80 to-transparent"
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header Bar */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
           <div>
-            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400 mb-2">
-              <Compass className="w-4 h-4 text-amber-400" />
+            <div className="fx-wipe flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400 mb-2" style={delay(0)}>
+              <Compass className="fx-compass w-4 h-4 text-amber-400" />
               <span>BẢN ĐỒ TƯƠNG TÁC ĐỊA LÝ & DI SẢN</span>
             </div>
-            <h2 className="text-3xl sm:text-4xl font-serif font-bold text-stone-100 tracking-tight">
-              Không Gian Văn Hóa Việt Nam · Trọng tâm Đông Nam Bộ
-            </h2>
-            <p className="text-stone-400 text-sm mt-1 max-w-2xl leading-relaxed">
+            <RevealTitle
+              text="Không Gian Văn Hóa Việt Nam · Trọng tâm Đông Nam Bộ"
+              className="text-3xl sm:text-4xl font-serif font-bold text-stone-100 tracking-tight"
+              delayMs={200}
+            />
+            <p className="fx-rise text-stone-400 text-sm mt-1 max-w-2xl leading-relaxed" style={delay(900)}>
               Địa giới hành chính 34 tỉnh, thành sau sắp xếp 2025 · Làm nổi bật Đông Nam Bộ và đường biên giới Việt Nam.
             </p>
           </div>
 
           {/* Province Selector Pills */}
-          <div className="flex flex-wrap items-center gap-2 bg-stone-900/90 p-1.5 rounded-xl border border-stone-800/80">
+          <div className="fx-pop flex flex-wrap items-center gap-2 bg-stone-900/90 p-1.5 rounded-xl border border-stone-800/80" style={delay(1000)}>
             <button
               onClick={handleReset}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -732,21 +918,22 @@ export function CulturalMap({
 
         {/* Category Filter */}
         <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 scrollbar-none">
-          <span className="text-xs text-stone-500 font-mono flex items-center gap-1 shrink-0 mr-1">
+          <span className="fx-pop text-xs text-stone-500 font-mono flex items-center gap-1 shrink-0 mr-1" style={delay(1100)}>
             <Filter className="w-3.5 h-3.5" />
             <span>Phân loại:</span>
           </span>
           <button
             onClick={() => onSelectCategory('all')}
-            className={`px-3 py-1 rounded-lg text-xs transition-colors shrink-0 ${
+            className={`fx-pop px-3 py-1 rounded-lg text-xs transition-colors shrink-0 ${
               selectedCategory === 'all'
                 ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40 font-medium'
                 : 'bg-stone-900/80 text-stone-400 hover:text-stone-200 border border-stone-800'
             }`}
+            style={delay(1160)}
           >
             Tất cả ({points.length})
           </button>
-          {CULTURAL_CATEGORIES.map((cat) => {
+          {CULTURAL_CATEGORIES.map((cat, catIdx) => {
             const count = points.filter(
               (p) =>
                 (selectedProvince === 'all' || p.provinceId === selectedProvince) &&
@@ -757,11 +944,12 @@ export function CulturalMap({
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className={`px-3 py-1 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5 ${
+                className={`fx-pop px-3 py-1 rounded-lg text-xs transition-colors shrink-0 flex items-center gap-1.5 ${
                   selectedCategory === cat.id
                     ? `${cat.bgColor} border font-medium`
                     : 'bg-stone-900/80 text-stone-400 hover:text-stone-200 border border-stone-800'
                 }`}
+                style={delay(1240 + catIdx * 70)}
               >
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
                 <span>{cat.label}</span>
@@ -771,14 +959,26 @@ export function CulturalMap({
           })}
         </div>
 
-        {/* Interactive Map Canvas Container */}
+        {/* Interactive Map Canvas Container (bọc ngoài để observer không bị clip-path chặn) */}
+        <div ref={frameWrapRef} className="relative w-full">
         <div
           ref={mapContainerRef}
-          className="relative w-full aspect-[16/10] sm:aspect-[16/9] rounded-3xl border border-stone-800 shadow-2xl overflow-hidden select-none"
+          className={`cm-frame ${inView ? 'cm-in' : ''} relative w-full aspect-[16/10] sm:aspect-[16/9] rounded-3xl border border-stone-800 hover:border-amber-400/25 shadow-2xl overflow-hidden select-none transition-[border-color] duration-500`}
+          onPointerMove={handleFrameMove}
+          onPointerLeave={handleFrameLeave}
           style={{ background: 'radial-gradient(120% 110% at 50% 0%, #0c2536 0%, #07111b 55%, #04080f 100%)' }}
         >
           {/* Lưới chấm tọa độ */}
-          <div className="absolute inset-0 bg-[radial-gradient(#3b4a57_1px,transparent_1px)] [background-size:24px_24px] opacity-20 pointer-events-none" />
+          <div
+            className="absolute inset-0 bg-[radial-gradient(#3b4a57_1px,transparent_1px)] [background-size:24px_24px] opacity-20 pointer-events-none"
+            style={{ backgroundPosition: `${gridPos(camera.x)} ${gridPos(camera.y)}` }}
+          />
+
+          {/* Ánh sáng biển trôi chậm: hai quầng sáng mờ lướt nhẹ phía sau bản đồ */}
+          <div aria-hidden="true" className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="cm-drift-a" />
+            <div className="cm-drift-b" />
+          </div>
 
           {/* SVG Map Canvas */}
           <svg
@@ -875,6 +1075,23 @@ export function CulturalMap({
               })}
             </g>
 
+            {/* Sóng lan từ tâm 3 tỉnh, chạy một lần khi bản đồ lần đầu hiện ra */}
+            <g pointerEvents="none">
+              {TARGET_IDS.map((id, idx) => {
+                const b = provinceBounds.get(id);
+                if (!b) return null;
+                return (
+                  <g key={`wave-${id}`} transform={`translate(${(b.minX + b.maxX) / 2} ${(b.minY + b.maxY) / 2}) scale(${pxScale})`}>
+                    {[0, 1, 2].map((k) => (
+                      <circle key={k} r="140" fill={PROVINCE_STYLE[id].color} fillOpacity="0.05"
+                        stroke={PROVINCE_STYLE[id].color} strokeWidth="1.6" vectorEffect="non-scaling-stroke"
+                        className="cm-wave" style={delay(1500 + idx * 240 + k * 420)} />
+                    ))}
+                  </g>
+                );
+              })}
+            </g>
+
             {/* Marker điểm di sản. Nhóm ngoài chỉ dùng attribute transform (định vị + tỉ lệ),
                 animation/hover chạy ở nhóm trong bằng CSS để hai thứ không đè nhau. */}
             {displayedPoints.map((point, i) => {
@@ -892,17 +1109,30 @@ export function CulturalMap({
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActivePoint(point); } }}
                   onMouseEnter={() => setHoveredPoint(point)} onMouseLeave={() => setHoveredPoint(null)}
                   onFocus={() => setHoveredPoint(point)} onBlur={() => setHoveredPoint(null)}>
-                  <g className="cm-pop" style={{ animationDelay: `${Math.min(i * 55, 600) + 500}ms` }}>
+                  <g
+                    className={inView ? 'cm-pop' : undefined}
+                    style={{
+                      animationDelay: `${Math.min(i * 55, 600) + (markersReadyRef.current ? 0 : 1500)}ms`,
+                      opacity: inView ? undefined : 0,
+                    }}
+                  >
                     <g className="cm-motion" style={{
                       transform: isHovered || isSelected ? 'scale(1.3)' : 'scale(1)',
                       transition: 'transform 260ms cubic-bezier(.34,1.56,.64,1)',
                     }}>
                       <circle r="16" fill="transparent" />
+                      {/* quầng sáng mềm, đậm hơn khi hover/chọn */}
+                      <circle r="19" fill={markerColor} style={{
+                        opacity: isHovered || isSelected ? 0.16 : 0.06,
+                        transition: 'opacity 300ms ease',
+                      }} />
                       {point.isFeatured && (
                         <circle r="9" fill="none" stroke={markerColor} strokeWidth="1.5" className="cm-ring"
                           style={{ animationDelay: `${(i % 5) * 450}ms` }} />
                       )}
                       {isSelected && <circle r="12" fill="none" stroke={markerColor} strokeWidth="1.5" opacity="0.9" />}
+                      {isSelected && <circle r="12" fill="none" stroke={markerColor} strokeWidth="1.2" className="cm-ring"
+                        style={{ animationDuration: '1.8s' }} />}
                       <circle r="11" fill={markerColor} opacity="0.2" />
                       <circle r="5.5" fill={markerColor} stroke="#fff" strokeWidth="1.8" />
                       <circle r="1.8" fill="#fff" opacity="0.85" />
@@ -935,6 +1165,14 @@ export function CulturalMap({
 
           {/* Viền tối nhẹ quanh khung để mắt tập trung vào giữa bản đồ */}
           <div className="absolute inset-0 pointer-events-none rounded-3xl shadow-[inset_0_0_110px_rgba(2,6,14,0.85)]" />
+
+          {/* Đèn rọi vàng theo con trỏ */}
+          <div aria-hidden="true" className="cm-spot absolute inset-0 z-[4] pointer-events-none rounded-3xl" />
+
+          {/* Vệt sáng mềm quét ngang mặt kính một lần khi bản đồ lần đầu hiện ra */}
+          <div aria-hidden="true" className="absolute inset-0 z-[5] overflow-hidden pointer-events-none">
+            <div className="cm-sheen" />
+          </div>
 
           {/* Trạng thái tải / lỗi */}
           {!shapes.length && (
@@ -970,7 +1208,7 @@ export function CulturalMap({
               <ZoomOut className="w-4 h-4" />
             </button>
             <button onClick={handleReset} aria-label="Đặt lại bản đồ" className={zoomBtn}>
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-4 h-4 transition-transform duration-500 group-hover:-rotate-180" />
             </button>
           </div>
 
@@ -979,8 +1217,12 @@ export function CulturalMap({
             {activeProvinceInfo ? (
               <div key={activeProvinceInfo.id}
                 className="cm-slide bg-stone-950/90 backdrop-blur-md border border-stone-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: PROVINCE_STYLE[activeProvinceInfo.id].color }} />
+                <span className="relative flex w-3 h-3 shrink-0">
+                  <span className="cm-ring absolute inset-0 rounded-full"
+                    style={{ backgroundColor: PROVINCE_STYLE[activeProvinceInfo.id].color }} />
+                  <span className="relative w-3 h-3 rounded-full"
+                    style={{ backgroundColor: PROVINCE_STYLE[activeProvinceInfo.id].color }} />
+                </span>
                 <div>
                   <h4 className="text-sm font-bold text-stone-100">{activeProvinceInfo.name}</h4>
                   <p className="text-[11px] text-stone-400">{activeProvinceInfo.mergedFrom || activeProvinceInfo.tagline}</p>
@@ -1013,11 +1255,22 @@ export function CulturalMap({
           <div className="absolute bottom-4 left-4 z-20 hidden md:flex items-center gap-4 bg-stone-950/90 backdrop-blur-md border border-stone-800 px-3.5 py-2 rounded-xl text-[11px] text-stone-300">
             <span className="font-mono text-stone-500">Đông Nam Bộ:</span>
             {TARGET_IDS.map((id) => (
-              <div key={id} className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm border"
+              <button
+                key={id}
+                type="button"
+                onClick={() => selectProvince(id)}
+                onMouseEnter={() => setHoveredProvince(id)}
+                onMouseLeave={() => setHoveredProvince(null)}
+                onFocus={() => setHoveredProvince(id)}
+                onBlur={() => setHoveredProvince(null)}
+                className={`group/leg flex items-center gap-1.5 transition-colors hover:text-stone-100 focus-visible:outline-none focus-visible:text-amber-300 ${
+                  selectedProvince === id ? 'text-stone-100' : ''
+                }`}
+              >
+                <span className="w-3 h-3 rounded-sm border transition-transform duration-300 group-hover/leg:scale-125"
                   style={{ backgroundColor: `${PROVINCE_STYLE[id].color}80`, borderColor: PROVINCE_STYLE[id].color }} />
                 <span>{id === 'hcm' ? 'Thành phố Hồ Chí Minh' : id === 'tay-ninh' ? 'Tây Ninh' : 'Đồng Nai'}</span>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -1038,6 +1291,7 @@ export function CulturalMap({
               }}
             />
           )}
+        </div>
         </div>
       </div>
     </div>

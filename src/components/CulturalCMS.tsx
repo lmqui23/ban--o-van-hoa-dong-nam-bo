@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import {
   X,
   Plus,
@@ -18,6 +19,39 @@ import { CulturalPoint, ProvinceId, CulturalCategoryId } from '../types/cultural
 import { PROVINCES, CULTURAL_CATEGORIES } from '../data/culturalData';
 import { validateCulturalPoint } from '../utils/culturalLogic';
 import { uploadImageToSupabase } from '../lib/supabase';
+
+/* ------------------------------------------------------------------ */
+/* Helpers (cùng quy ước với LandingHero)                              */
+/* ------------------------------------------------------------------ */
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+const canHover = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+
+const delay = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties;
+
+/** Tách câu thành từng chữ trồi lên từ sau mặt nạ (nội dung không đổi). */
+function Words({ text, start, step = 60 }: { text: string; start: number; step?: number }) {
+  const words = text.split(/\s+/).filter(Boolean);
+  return (
+    <>
+      {words.map((w, i) => (
+        <span key={i}>
+          <span className="cms-mask">
+            <span className="cms-word" style={delay(start + i * step)}>
+              {w}
+            </span>
+          </span>
+          {i < words.length - 1 ? ' ' : null}
+        </span>
+      ))}
+    </>
+  );
+}
 
 interface CulturalCMSProps {
   points: CulturalPoint[];
@@ -49,6 +83,21 @@ export function CulturalCMS({
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const spotRef = useRef<HTMLDivElement>(null);
+
+  // Đom đóm bay lên phía sau bảng quản trị, giá trị cố định để không nhảy giữa các lần render.
+  const embers = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, i) => ({
+        left: (i * 37 + 11) % 100,
+        size: 2 + ((i * 5) % 4),
+        dur: 9 + ((i * 7) % 9),
+        del: ((i * 13) % 10) * 0.9,
+        dx: (i % 2 ? 1 : -1) * (20 + ((i * 11) % 60)),
+        o: 0.3 + ((i * 3) % 5) * 0.08,
+      })),
+    [],
+  );
 
   if (!isOpen) return null;
 
@@ -192,43 +241,92 @@ export function CulturalCMS({
     }
   };
 
+  // Đèn rọi vàng đi theo chuột trên nền mờ.
+  const handleOverlayMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (!canHover() || prefersReducedMotion()) return;
+    const el = spotRef.current;
+    if (!el) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    el.style.setProperty('--px', `${((e.clientX - r.left) / r.width) * 100}%`);
+    el.style.setProperty('--py', `${((e.clientY - r.top) / r.height) * 100}%`);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl overflow-hidden my-auto">
+    <div
+      onMouseMove={handleOverlayMove}
+      className="cms-root cms-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/85 backdrop-blur-md overflow-y-auto"
+    >
+      <style>{CSS}</style>
+
+      {/* Đèn rọi vàng đi theo chuột */}
+      <div ref={spotRef} aria-hidden="true" className="cms-spot pointer-events-none absolute inset-0" />
+
+      {/* Đom đóm bay lên */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        {embers.map((e, i) => (
+          <span
+            key={i}
+            className="cms-ember absolute bottom-0 rounded-full bg-amber-300"
+            style={
+              {
+                left: `${e.left}%`,
+                width: e.size,
+                height: e.size,
+                animationDuration: `${e.dur}s`,
+                animationDelay: `${0.8 + e.del}s`,
+                '--dx': `${e.dx}px`,
+                '--o': e.o,
+                boxShadow: '0 0 10px 2px rgba(251,191,36,0.55)',
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+
+      <div className="cms-panel relative w-full max-w-5xl max-h-[92vh] flex flex-col bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl overflow-hidden my-auto">
+        {/* Vệt sáng vàng quét qua mép trên khi bảng mở */}
+        <span
+          aria-hidden="true"
+          className="cms-edge absolute top-0 left-0 right-0 h-px z-20 bg-gradient-to-r from-transparent via-amber-300 to-transparent"
+          style={delay(500)}
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-950/90 shrink-0">
           <div>
-            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400">
-              <Layers className="w-3.5 h-3.5" />
+            <div className="cms-wipe flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400" style={delay(250)}>
+              <Layers className="cms-twinkle w-3.5 h-3.5" />
               <span>HỆ THỐNG QUẢN LÝ NỘI DUNG (CMS - SUPABASE)</span>
             </div>
             <h2 className="text-xl font-serif font-bold text-stone-100">
-              Quản Trị Cơ Sở Dữ Liệu Văn Hóa & Đa Phương Tiện
+              <Words text="Quản Trị Cơ Sở Dữ Liệu Văn Hóa & Đa Phương Tiện" start={350} />
             </h2>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-stone-300 hover:text-amber-400 bg-stone-800/80 hover:bg-stone-800 border border-stone-700/80 transition-colors"
+              className="cms-pop group/reset flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-stone-300 hover:text-amber-400 bg-stone-800/80 hover:bg-stone-800 border border-stone-700/80 hover:border-amber-400/50 transition-colors"
+              style={delay(400)}
               title="Khôi phục dữ liệu mặc định chuẩn"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3.5 h-3.5 transition-transform duration-500 group-hover/reset:-rotate-180" />
               <span className="hidden sm:inline">Khôi phục mặc định</span>
             </button>
             <button
               onClick={onClose}
               aria-label="Đóng bảng quản trị"
-              className="p-2 rounded-xl text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
+              className="cms-pop group/close p-2 rounded-xl text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
+              style={delay(480)}
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 transition-transform duration-300 group-hover/close:rotate-90" />
             </button>
           </div>
         </div>
 
         {/* Success Toast */}
         {successToast && (
-          <div className="bg-emerald-500/20 border-b border-emerald-500/40 text-emerald-300 text-xs px-6 py-2.5 flex items-center gap-2">
+          <div className="cms-pop bg-emerald-500/20 border-b border-emerald-500/40 text-emerald-300 text-xs px-6 py-2.5 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{successToast}</span>
           </div>
@@ -238,7 +336,7 @@ export function CulturalCMS({
         <div className="flex-1 overflow-y-auto p-6">
           {editingPoint ? (
             /* ================= EDIT / CREATE FORM ================= */
-            <div className="space-y-6">
+            <div className="cms-stagger space-y-6">
               <div className="flex items-center justify-between pb-4 border-b border-stone-800">
                 <h3 className="text-lg font-serif font-bold text-amber-300">
                   {isCreatingNew ? 'Thêm Địa Điểm Di Sản Mới' : `Chỉnh Sửa: ${editingPoint.name}`}
@@ -253,7 +351,7 @@ export function CulturalCMS({
 
               {/* Validation Errors */}
               {errors.length > 0 && (
-                <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-xs space-y-1">
+                <div className="cms-alert p-4 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-xs space-y-1">
                   <div className="font-semibold flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4 text-red-400" />
                     <span>Vui lòng kiểm tra các thông tin sau:</span>
@@ -267,7 +365,7 @@ export function CulturalCMS({
               )}
 
               {/* Form Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="cms-stagger grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Name */}
                 <div className="space-y-1.5 md:col-span-2">
                   <label className="text-xs font-semibold text-stone-300">Tên địa điểm di sản *</label>
@@ -429,7 +527,7 @@ export function CulturalCMS({
 
                   {/* Preview ảnh chính */}
                   {editingPoint.coverImage && (
-                    <div className="pt-2 flex items-center gap-3">
+                    <div className="cms-pop pt-2 flex items-center gap-3">
                       <img
                         src={editingPoint.coverImage}
                         alt="Ảnh đại diện"
@@ -481,7 +579,7 @@ export function CulturalCMS({
                       </p>
                       <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                         {editingPoint.galleryImages.map((url, idx) => (
-                          <div key={idx} className="relative group rounded-lg overflow-hidden border border-stone-800 aspect-video">
+                          <div key={idx} className="cms-pop relative group rounded-lg overflow-hidden border border-stone-800 hover:border-amber-400/50 transition-colors aspect-video" style={delay(Math.min(idx, 8) * 50)}>
                             <img src={url} alt={`Ảnh phụ ${idx + 1}`} className="w-full h-full object-cover" />
                             <button
                               type="button"
@@ -585,7 +683,7 @@ export function CulturalCMS({
                 <button
                   type="button"
                   onClick={() => setEditingPoint(null)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-stone-300 hover:bg-stone-800 transition-colors"
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-stone-300 hover:bg-stone-800 hover:-translate-y-0.5 active:translate-y-0 transition-all"
                 >
                   Hủy bỏ
                 </button>
@@ -593,16 +691,17 @@ export function CulturalCMS({
                   type="button"
                   disabled={isSaving || uploadingCover || uploadingGallery}
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold text-stone-950 bg-amber-400 hover:bg-amber-300 shadow-md shadow-amber-950/40 transition-all cursor-pointer disabled:opacity-50"
+                  className="cms-cta relative overflow-hidden flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold text-stone-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-md shadow-amber-950/40 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-50"
                 >
+                  <span aria-hidden="true" className="cms-sheen absolute inset-y-0 left-0 w-1/4 bg-white/40 blur-md" />
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-stone-950" />}
-                  <span>{isCreatingNew ? 'Thêm vào bản đồ' : 'Lưu cập nhật'}</span>
+                  <span className="relative">{isCreatingNew ? 'Thêm vào bản đồ' : 'Lưu cập nhật'}</span>
                 </button>
               </div>
             </div>
           ) : (
             /* ================= DATA LIST & TABLE VIEW ================= */
-            <div className="space-y-4">
+            <div className="cms-stagger space-y-4">
               {/* Toolbar */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="relative w-full sm:w-72">
@@ -632,10 +731,11 @@ export function CulturalCMS({
 
                   <button
                     onClick={handleStartCreate}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-stone-950 bg-amber-400 hover:bg-amber-300 transition-colors whitespace-nowrap cursor-pointer shadow-sm shadow-amber-950/40"
+                    className="cms-cta group/add relative overflow-hidden flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-stone-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap cursor-pointer shadow-sm shadow-amber-950/40"
                   >
-                    <Plus className="w-4 h-4 text-stone-950" />
-                    <span>Thêm địa điểm mới</span>
+                    <span aria-hidden="true" className="cms-sheen absolute inset-y-0 left-0 w-1/4 bg-white/40 blur-md" />
+                    <Plus className="relative w-4 h-4 text-stone-950 transition-transform duration-300 group-hover/add:rotate-90" />
+                    <span className="relative">Thêm địa điểm mới</span>
                   </button>
                 </div>
               </div>
@@ -660,17 +760,17 @@ export function CulturalCMS({
                         </td>
                       </tr>
                     ) : (
-                      filteredPoints.map((p) => {
+                      filteredPoints.map((p, rowIndex) => {
                         const prov = PROVINCES.find((pr) => pr.id === p.provinceId);
                         const cat = CULTURAL_CATEGORIES.find((c) => c.id === p.category);
 
                         return (
-                          <tr key={p.id} className="hover:bg-stone-900/50 transition-colors">
+                          <tr key={p.id} className="cms-row group hover:bg-stone-900/50 transition-colors" style={delay(Math.min(rowIndex, 10) * 50)}>
                             <td className="py-3 px-4 flex items-center gap-3">
                               <img
                                 src={p.coverImage}
                                 alt={p.name}
-                                className="w-10 h-10 rounded-lg object-cover border border-stone-800 shrink-0"
+                                className="w-10 h-10 rounded-lg object-cover border border-stone-800 group-hover:border-amber-400/50 group-hover:scale-110 transition-all duration-300 shrink-0"
                                 referrerPolicy="no-referrer"
                               />
                               <div>
@@ -701,14 +801,14 @@ export function CulturalCMS({
                               <button
                                 onClick={() => handleStartEdit(p)}
                                 aria-label={`Sửa ${p.name}`}
-                                className="p-1.5 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-800 transition-colors inline-flex"
+                                className="p-1.5 rounded-lg text-stone-400 hover:text-amber-300 hover:bg-stone-800 hover:scale-110 active:scale-95 transition-all inline-flex"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDelete(p.id, p.name)}
                                 aria-label={`Xóa ${p.name}`}
-                                className="p-1.5 rounded-lg text-stone-400 hover:text-red-400 hover:bg-stone-800 transition-colors inline-flex"
+                                className="p-1.5 rounded-lg text-stone-400 hover:text-red-400 hover:bg-stone-800 hover:scale-110 active:scale-95 transition-all inline-flex"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -727,3 +827,86 @@ export function CulturalCMS({
     </div>
   );
 }
+/* ------------------------------------------------------------------ */
+/* CSS: trạng thái ẩn + animation nằm trong media query no-preference, */
+/* nên người dùng bật "giảm chuyển động" vẫn thấy đủ nội dung.         */
+/* Dùng fill-mode `backwards` để sau khi chạy xong phần tử trở về      */
+/* style gốc, không đè lên các hiệu ứng hover của Tailwind.            */
+/* ------------------------------------------------------------------ */
+
+// Mỗi phần tử con trực tiếp của .cms-stagger hiện lần lượt, cách nhau 60ms.
+const STAGGER = Array.from(
+  { length: 18 },
+  (_, i) => `:where(.cms-root .cms-stagger) > :nth-child(${i + 1}) { --d: ${100 + i * 60}ms; }`,
+).join('\n');
+
+const CSS = `
+.cms-root .cms-spot {
+  background: radial-gradient(420px circle at var(--px, 50%) var(--py, 30%), rgba(251, 191, 36, 0.10), transparent 65%);
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+.cms-root .cms-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-top: 0.2em; margin-top: -0.2em;
+  padding-bottom: 0.14em; margin-bottom: -0.14em;
+}
+.cms-root .cms-word { display: inline-block; transform-origin: 0 100%; }
+.cms-root .cms-edge { opacity: 0; }
+.cms-root .cms-ember, .cms-root .cms-sheen { display: none; }
+
+/* Ô nhập liệu: viền vàng + quầng sáng nhẹ khi focus */
+.cms-root input:focus, .cms-root textarea:focus, .cms-root select:focus {
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14);
+}
+
+${STAGGER}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cms-root .cms-spot { opacity: 1; transition: opacity 1.2s ease 0.8s; }
+  .cms-root .cms-ember, .cms-root .cms-sheen { display: block; }
+  .cms-root input, .cms-root textarea, .cms-root select { transition: border-color 0.2s, box-shadow 0.25s; }
+
+  /* ---- Mở bảng quản trị ---- */
+  .cms-root.cms-overlay { animation: cms-fade 0.35s ease backwards; }
+  .cms-root .cms-panel  { animation: cms-panel 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+  .cms-root .cms-edge   { animation: cms-edge 1.4s ease-out var(--d, 0ms) backwards; }
+  .cms-root .cms-wipe   { animation: cms-wipe 0.9s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 0ms) backwards; }
+  .cms-root .cms-word   { animation: cms-word-up 1s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) backwards; }
+  .cms-root .cms-pop    { animation: cms-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0ms) backwards; }
+  .cms-root .cms-row    { animation: cms-row 0.6s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) backwards; }
+  .cms-root .cms-alert  { animation: cms-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards, cms-shake 0.5s ease 0.5s; }
+  :where(.cms-root .cms-stagger) > * { animation: cms-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) backwards; }
+
+  /* ---- Hiệu ứng lặp nhẹ ---- */
+  .cms-root .cms-cta     { animation: cms-ring 2.8s ease-out 2s infinite; }
+  .cms-root .cms-sheen   { transform: translateX(-120%) skewX(-20deg); animation: cms-sheen 4.5s ease-in-out 1.5s infinite; }
+  .cms-root .cms-twinkle { animation: cms-twinkle 2.6s ease-in-out infinite; }
+  .cms-root .cms-ember   { opacity: 0; animation-name: cms-ember; animation-timing-function: linear; animation-iteration-count: infinite; }
+}
+
+/* Giảm chuyển động: hiện đủ nội dung, không animation */
+@media (prefers-reduced-motion: reduce) {
+  .cms-root .cms-edge { display: none; }
+}
+
+@keyframes cms-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cms-panel { from { opacity: 0; transform: translateY(32px) scale(0.94); filter: blur(10px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes cms-edge { 0% { opacity: 0; transform: scaleX(0); } 40% { opacity: 1; transform: scaleX(1); } 100% { opacity: 0; transform: scaleX(1); } }
+@keyframes cms-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes cms-word-up { from { opacity: 0; transform: translateY(115%) rotate(5deg); } to { opacity: 1; transform: none; } }
+@keyframes cms-rise { from { opacity: 0; transform: translateY(16px); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes cms-row { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes cms-pop { 0% { opacity: 0; transform: scale(0.8) translateY(12px); } 100% { opacity: 1; transform: none; } }
+@keyframes cms-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+@keyframes cms-sheen { 0%, 55% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(560%) skewX(-20deg); } }
+@keyframes cms-ring { 0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); } 70%, 100% { box-shadow: 0 0 0 12px rgba(251, 191, 36, 0); } }
+@keyframes cms-twinkle { 0%, 100% { transform: scale(1) rotate(0); opacity: 1; } 50% { transform: scale(1.3) rotate(20deg); opacity: 0.75; } }
+@keyframes cms-ember {
+  0% { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  12% { opacity: var(--o, 0.5); }
+  100% { transform: translate3d(var(--dx, 0px), -100vh, 0) scale(1.1); opacity: 0; }
+}
+`;
